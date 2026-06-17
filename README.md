@@ -22,7 +22,7 @@ English: [README.en.md](README.en.md)
 ### 從 GitHub source 執行
 
 ```powershell
-git clone https://github.com/arthurtaoyutsun/lecture-video-to-pdf-studio.git
+git clone https://github.com/taoyutsun/lecture-video-to-pdf-studio.git
 cd lecture-video-to-pdf-studio
 py -3.10 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -U pip
@@ -30,7 +30,11 @@ py -3.10 -m venv .venv
 .\.venv\Scripts\python.exe -m lecture_video_to_pdf run
 ```
 
-開啟後進入 `http://127.0.0.1:8787/`。
+預設開啟後進入 `http://127.0.0.1:8787/`。若該 port 已被其他程式使用，可改用其他 port，例如：
+
+```powershell
+.\.venv\Scripts\python.exe -m lecture_video_to_pdf run --port 8788
+```
 
 ### 從 Release 取得打包版
 
@@ -71,6 +75,8 @@ output/
 lecture-video-to-pdf run
 lecture-video-studio run
 ```
+
+上面兩個是等效的 console script，擇一使用即可。從 source 安裝時，這些命令會由 `pip install -e .` 安裝到目前 Python 環境的 `Scripts` 目錄，不會以同名檔案出現在專案根目錄；若使用 release portable 版，請執行 `LectureVideo2PDF.exe run`。
 
 影片轉講義 PDF：
 
@@ -134,7 +140,7 @@ PDF 擷取不需要 ASR。若要使用內建 `faster-whisper`，可在 Web UI �
 
 測試連線會依序嘗試 `/health` 與 OpenAI 常見的 `/models` 端點。若端點像 QwenASR 一樣由服務端固定載入模型，Web UI 會把模型選單固定為 `default（由端點配置）`，避免誤導使用者以為可由本工具切換本地模型。
 
-若使用 QwenASR portable 版，可先啟動其 OpenAI 相容轉錄端點，再在本工具填入端點網址。若希望 Web UI 顯示本機 QwenASR 安裝狀態，可設定環境變數 `LECTURE_VIDEO_TO_PDF_QWEN_ASR_ROOT` 或 `QWEN_ASR_HOME` 指向 QwenASR 根目錄。
+若使用 [QwenASRMiniTool](https://github.com/dseditor/QwenASRMiniTool) portable 版，可先啟動其 OpenAI 相容轉錄端點，再在本工具填入端點網址。若希望 Web UI 顯示本機 QwenASR 安裝狀態，可設定環境變數 `LECTURE_VIDEO_TO_PDF_QWEN_ASR_ROOT` 或 `QWEN_ASR_HOME` 指向 QwenASR 根目錄。
 
 若電腦上已有其他工具提供 CUDA runtime DLL，且不在系統 `PATH` 中，可用 `LECTURE_VIDEO_TO_PDF_EXTERNAL_CUDA_DIRS` 指定額外 DLL 目錄；多個目錄請使用作業系統的路徑分隔符號。
 
@@ -185,4 +191,4 @@ output/
 - Arthur Tao
 - 部落格：https://taoyutsun.blogspot.com/
 - Facebook：https://facebook.com/arthurtaoyutsun
-- 原始碼：https://github.com/arthurtaoyutsun/lecture-video-to-pdf-studio
+- 原始碼：https://github.com/taoyutsun/lecture-video-to-pdf-studio

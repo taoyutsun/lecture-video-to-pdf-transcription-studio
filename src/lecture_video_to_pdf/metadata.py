@@ -8,7 +8,7 @@ APP_VERSION = "0.1.0"
 AUTHOR_NAME = "Arthur Tao"
 AUTHOR_BLOG_URL = "https://taoyutsun.blogspot.com/"
 AUTHOR_FACEBOOK_URL = "https://facebook.com/arthurtaoyutsun"
-SOURCE_REPO_URL = "https://github.com/arthurtaoyutsun/lecture-video-to-pdf-studio"
+SOURCE_REPO_URL = "https://github.com/taoyutsun/lecture-video-to-pdf-studio"
 LICENSE_NAME = "MIT License"
 
 AUTHOR_DESCRIPTION = (

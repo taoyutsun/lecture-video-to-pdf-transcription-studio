@@ -23,7 +23,7 @@ PDF extraction does not require ASR. Transcription can use local `faster-whisper
 ### From Source
 
 ```powershell
-git clone https://github.com/arthurtaoyutsun/lecture-video-to-pdf-studio.git
+git clone https://github.com/taoyutsun/lecture-video-to-pdf-studio.git
 cd lecture-video-to-pdf-studio
 py -3.10 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -U pip
@@ -31,7 +31,11 @@ py -3.10 -m venv .venv
 .\.venv\Scripts\python.exe -m lecture_video_to_pdf run
 ```
 
-Open `http://127.0.0.1:8787/`.
+By default, open `http://127.0.0.1:8787/`. If that port is already in use, choose another port:
+
+```powershell
+.\.venv\Scripts\python.exe -m lecture_video_to_pdf run --port 8788
+```
 
 ### From Release
 
@@ -71,6 +75,8 @@ Start the Web UI:
 lecture-video-to-pdf run
 lecture-video-studio run
 ```
+
+These two console scripts are aliases; use either one. When installed from source, `pip install -e .` creates them in the current Python environment's `Scripts` directory, so they do not appear as files in the project root. In the portable release, use `LectureVideo2PDF.exe run`.
 
 Convert a lecture video to slide PDF:
 
@@ -128,7 +134,7 @@ For OpenAI-compatible ASR endpoints, configure `base_url`, `api_key/token`, `mod
 
 The connection test tries `/health` and common OpenAI `/models` endpoints. If the endpoint manages the loaded model server-side, such as QwenASR, the Web UI fixes the model selector to `default (configured by endpoint)` to avoid implying that this tool can switch the local model.
 
-For a portable QwenASR installation, start its OpenAI-compatible transcription endpoint and enter the endpoint URL in this tool. To let the Web UI show local QwenASR installation status, set `LECTURE_VIDEO_TO_PDF_QWEN_ASR_ROOT` or `QWEN_ASR_HOME` to the QwenASR root directory.
+For a portable [QwenASRMiniTool](https://github.com/dseditor/QwenASRMiniTool) installation, start its OpenAI-compatible transcription endpoint and enter the endpoint URL in this tool. To let the Web UI show local QwenASR installation status, set `LECTURE_VIDEO_TO_PDF_QWEN_ASR_ROOT` or `QWEN_ASR_HOME` to the QwenASR root directory.
 
 If another local tool provides CUDA runtime DLLs but they are not on the system `PATH`, set `LECTURE_VIDEO_TO_PDF_EXTERNAL_CUDA_DIRS` to the extra DLL directories. Use the operating system path separator for multiple directories.
 
@@ -179,4 +185,4 @@ References:
 - Arthur Tao
 - Blog: https://taoyutsun.blogspot.com/
 - Facebook: https://facebook.com/arthurtaoyutsun
-- Source code: https://github.com/arthurtaoyutsun/lecture-video-to-pdf-studio
+- Source code: https://github.com/taoyutsun/lecture-video-to-pdf-studio
