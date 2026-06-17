@@ -23,8 +23,8 @@ PDF extraction does not require ASR. Transcription can use local `faster-whisper
 ### From Source
 
 ```powershell
-git clone https://github.com/taoyutsun/lecture-video-to-pdf-studio.git
-cd lecture-video-to-pdf-studio
+git clone https://github.com/taoyutsun/lecture-video-to-pdf-transcription-studio.git
+cd lecture-video-to-pdf-transcription-studio
 py -3.10 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -U pip
 .\.venv\Scripts\python.exe -m pip install -e .
@@ -191,4 +191,4 @@ References:
 - Arthur Tao
 - Blog: https://taoyutsun.blogspot.com/
 - Facebook: https://facebook.com/arthurtaoyutsun
-- Source code: https://github.com/taoyutsun/lecture-video-to-pdf-studio
+- Source code: https://github.com/taoyutsun/lecture-video-to-pdf-transcription-studio

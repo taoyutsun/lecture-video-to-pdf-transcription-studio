@@ -22,8 +22,8 @@ English: [README.en.md](README.en.md)
 ### 從 GitHub source 執行
 
 ```powershell
-git clone https://github.com/taoyutsun/lecture-video-to-pdf-studio.git
-cd lecture-video-to-pdf-studio
+git clone https://github.com/taoyutsun/lecture-video-to-pdf-transcription-studio.git
+cd lecture-video-to-pdf-transcription-studio
 py -3.10 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -U pip
 .\.venv\Scripts\python.exe -m pip install -e .
@@ -196,4 +196,4 @@ output/
 - Arthur Tao
 - 部落格：https://taoyutsun.blogspot.com/
 - Facebook：https://facebook.com/arthurtaoyutsun
-- 原始碼：https://github.com/taoyutsun/lecture-video-to-pdf-studio
+- 原始碼：https://github.com/taoyutsun/lecture-video-to-pdf-transcription-studio
