@@ -25,6 +25,7 @@ from lecture_video_to_pdf.installer import cuda_runtime_install_command, faster_
 from lecture_video_to_pdf.models import AsrOptions, TranscriptSegment
 from lecture_video_to_pdf.pipeline import run_conversion, run_media_job, run_transcription
 from lecture_video_to_pdf.video import detect_candidate_frames, difference_hash, hamming_distance, probe_video
+from lecture_video_to_pdf import cli
 
 
 def make_synthetic_video(path: Path) -> None:
@@ -68,6 +69,11 @@ def make_black_intro_video(path: Path) -> None:
 
 
 class CoreTests(unittest.TestCase):
+    def test_cli_without_args_starts_web_ui(self):
+        with patch("lecture_video_to_pdf.cli.run_server") as run_server:
+            self.assertEqual(cli.main([]), 0)
+        run_server.assert_called_once_with("127.0.0.1", 8787, True)
+
     def test_difference_hash_distance(self):
         a = np.zeros((32, 32), dtype=np.uint8)
         b = np.ones((32, 32), dtype=np.uint8) * 255

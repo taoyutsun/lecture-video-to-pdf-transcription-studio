@@ -39,10 +39,18 @@ By default, open `http://127.0.0.1:8787/`. If that port is already in use, choos
 
 ### From Release
 
-Download and extract `LectureVideo2PDF-v0.1.0-windows-x64.zip`, open PowerShell in the extracted `LectureVideo2PDF` folder, then run:
+Download and extract `LectureVideo2PDF-v0.1.0-windows-x64.zip`, open the extracted `LectureVideo2PDF` folder, then double-click `LectureVideo2PDF.exe` to start the Web UI.
+
+To start from PowerShell, or to choose a port, run:
 
 ```powershell
 .\LectureVideo2PDF.exe run
+```
+
+If `8787` is already in use:
+
+```powershell
+.\LectureVideo2PDF.exe run --port 8788
 ```
 
 For large videos, pasting a local file path is recommended. File picker and drag-and-drop upload the media into the local `uploads/` folder before processing.

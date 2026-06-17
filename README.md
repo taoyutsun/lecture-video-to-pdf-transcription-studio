@@ -38,10 +38,18 @@ py -3.10 -m venv .venv
 
 ### 從 Release 取得打包版
 
-下載 release 壓縮檔 `LectureVideo2PDF-v0.1.0-windows-x64.zip` 後解壓縮，進入解壓縮出的 `LectureVideo2PDF` 資料夾，在 PowerShell 執行：
+下載 release 壓縮檔 `LectureVideo2PDF-v0.1.0-windows-x64.zip` 後解壓縮，進入解壓縮出的 `LectureVideo2PDF` 資料夾，直接雙擊 `LectureVideo2PDF.exe` 即可啟動 Web UI。
+
+若要從 PowerShell 啟動，或需要指定 port，可執行：
 
 ```powershell
 .\LectureVideo2PDF.exe run
+```
+
+若 `8787` 已被其他程式使用，可改用：
+
+```powershell
+.\LectureVideo2PDF.exe run --port 8788
 ```
 
 大型影片建議直接貼上本機檔案路徑；檔案選取或拖曳會先把檔案複製到本機 `uploads/` 資料夾再處理。
