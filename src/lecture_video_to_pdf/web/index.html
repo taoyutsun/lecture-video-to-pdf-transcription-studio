@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lecture Video to PDF & Transcription Studio</title>
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <h1>課程影片轉講義 PDF 與逐字稿工具</h1>
+          <p id="versionText">Lecture Video to PDF & Transcription Studio</p>
+        </div>
+        <div class="status-pill" id="envStatus">檢查環境中</div>
+      </header>
+
+      <main class="workspace">
+        <section class="panel input-panel">
+          <div class="tabs" role="tablist" aria-label="工作模式">
+            <button id="slidesTab" class="tab-button active" type="button" data-tab="slides">影片轉講義 PDF</button>
+            <button id="transcriptionTab" class="tab-button" type="button" data-tab="transcription">語音轉文字</button>
+          </div>
+
+          <h2 id="settingsTitle">轉換設定</h2>
+          <label>
+            <span id="sourceLabel">影片路徑（大檔案建議用此方式）</span>
+            <input id="videoPath" type="text" placeholder="C:\path\lecture.mp4" />
+          </label>
+          <div class="file-zone" id="dropZone">
+            <input id="filePicker" type="file" multiple />
+            <div>
+              <strong id="dropTitle">選取或拖曳影片</strong>
+              <span id="dropHint">可多選；檔案會先複製到本機 uploads 資料夾再處理</span>
+            </div>
+          </div>
+          <div id="fileQueue" class="file-queue"></div>
+          <label>
+            輸出資料夾
+            <input id="outputDir" type="text" value="output" />
+          </label>
+
+          <div id="pdfOptions" class="mode-panel">
+            <label>
+              處理內容
+              <select id="taskMode">
+                <option value="slides" selected>只擷取 PDF</option>
+                <option value="slides_and_transcription">PDF + 語音轉文字</option>
+              </select>
+            </label>
+            <div class="grid-two">
+              <label>
+                偵測模式
+                <select id="mode">
+                  <option value="balanced" selected>balanced</option>
+                  <option value="fast">fast</option>
+                  <option value="sensitive">sensitive</option>
+                </select>
+              </label>
+              <label>
+                裁切範圍
+                <input id="crop" type="text" value="auto" placeholder="auto 或 x,y,w,h" />
+              </label>
+            </div>
+          </div>
+
+          <div id="asrSection" class="asr-section hidden">
+            <h2>語音轉文字</h2>
+            <label>
+              ASR 引擎
+              <select id="asrEngine">
+                <option value="none" selected>none</option>
+                <option value="faster-whisper">faster-whisper</option>
+                <option value="openai-compatible">OpenAI-compatible endpoint</option>
+              </select>
+            </label>
+
+            <div id="asrCommonOptions" class="conditional hidden">
+              <div class="grid-two">
+                <label>
+                  語言
+                  <select id="asrLanguage"></select>
+                </label>
+                <label>
+                  response_format
+                  <select id="responseFormat">
+                    <option value="srt" selected>srt</option>
+                    <option value="verbose_json">verbose_json</option>
+                    <option value="json">json</option>
+                    <option value="text">text</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <div id="fasterWhisperOptions" class="conditional hidden">
+              <div class="dependency-box" id="fasterWhisperInstallBox">
+                <div>
+                  <strong>faster-whisper 依賴狀態</strong>
+                  <p id="fasterWhisperInstallStatus">檢查中</p>
+                </div>
+                <label class="check-row">
+                  <input id="autoInstallFasterWhisper" type="checkbox" />
+                  <span>若尚未安裝，允許程式在開始轉換前自動安裝 ASR 依賴</span>
+                </label>
+                <button id="installFasterWhisperBtn" type="button" class="secondary" disabled>立即安裝 ASR 依賴</button>
+                <pre id="fasterWhisperInstallLog" class="install-log hidden"></pre>
+              </div>
+              <div class="dependency-box" id="cudaRuntimeInstallBox">
+                <div>
+                  <strong>CUDA GPU 加速依賴</strong>
+                  <p id="cudaRuntimeInstallStatus">檢查中</p>
+                </div>
+                <label class="check-row">
+                  <input id="autoInstallCudaRuntime" type="checkbox" />
+                  <span>若偵測到 NVIDIA GPU 但缺 CUDA 12 runtime，允許程式背景安裝 GPU 加速依賴</span>
+                </label>
+                <button id="installCudaRuntimeBtn" type="button" class="secondary" disabled>立即安裝 CUDA GPU 依賴</button>
+                <pre id="cudaRuntimeInstallLog" class="install-log hidden"></pre>
+              </div>
+              <label>
+                模型
+                <select id="asrModel"></select>
+              </label>
+              <div class="grid-two">
+                <label>
+                  裝置
+                  <select id="asrDevice">
+                    <option value="auto" selected>auto</option>
+                    <option value="cpu">cpu</option>
+                    <option value="cuda">cuda</option>
+                  </select>
+                </label>
+                <label>
+                  compute_type
+                  <select id="computeType">
+                    <option value="auto" selected>auto</option>
+                    <option value="int8">int8</option>
+                    <option value="float16">float16</option>
+                    <option value="int8_float16">int8_float16</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <div id="endpointOptions" class="conditional hidden">
+              <label>
+                base_url
+                <input id="endpointBaseUrl" type="text" value="http://127.0.0.1:11435" />
+              </label>
+              <label>
+                模型
+                <select id="endpointModel"></select>
+              </label>
+              <div class="grid-two">
+                <label>
+                  api_key / token
+                  <input id="apiKey" type="password" />
+                </label>
+              </div>
+              <button id="testEndpointBtn" type="button" class="secondary">測試連線</button>
+              <div id="endpointStatus" class="inline-status"></div>
+            </div>
+          </div>
+
+          <button id="startBtn" type="button" class="primary">開始擷取 PDF</button>
+        </section>
+
+        <section class="panel output-panel">
+          <div class="section-head">
+            <h2>處理狀態</h2>
+            <span id="jobId"></span>
+          </div>
+          <div class="progress-track">
+            <div id="progressBar" class="progress-bar"></div>
+          </div>
+          <div id="progressText" class="progress-text">等待開始</div>
+          <div id="batchJobs" class="batch-jobs"></div>
+
+          <div class="paths" id="artifactPaths"></div>
+
+          <div id="reviewSection">
+            <div class="section-head">
+              <h2>縮圖審核</h2>
+              <button id="applyReviewBtn" type="button" class="secondary" disabled>套用審核並重建 PDF</button>
+            </div>
+            <div id="thumbGrid" class="thumb-grid"></div>
+          </div>
+        </section>
+
+        <section class="panel author-panel">
+          <h2>關於作者</h2>
+          <p id="authorDescription"></p>
+          <div class="author-links">
+            <a id="blogLink" href="#" target="_blank" rel="noreferrer">部落格</a>
+            <a id="facebookLink" href="#" target="_blank" rel="noreferrer">Facebook</a>
+            <a id="sourceLink" href="#" target="_blank" rel="noreferrer">原始碼</a>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,21 @@
+output_dir: output
+ffmpeg_path: null
+default_mode: balanced
+default_crop: auto
+sample_fps:
+  fast: 1.0
+  balanced: 2.0
+  sensitive: 3.0
+asr:
+  engine: none
+  faster_whisper:
+    model: base
+    device: auto
+    compute_type: auto
+    language: ""
+  openai_compatible:
+    base_url: http://127.0.0.1:11435
+    api_key: ""
+    model: ""
+    language: ""
+    response_format: verbose_json
