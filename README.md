@@ -38,7 +38,12 @@ py -3.10 -m venv .venv
 
 ### 從 Release 取得打包版
 
-下載 release 壓縮檔後解壓縮，執行 `scripts/start_windows.bat` 或包裝後的啟動檔。  
+下載 release 壓縮檔 `LectureVideo2PDF-v0.1.0-windows-x64.zip` 後解壓縮，進入解壓縮出的 `LectureVideo2PDF` 資料夾，在 PowerShell 執行：
+
+```powershell
+.\LectureVideo2PDF.exe run
+```
+
 大型影片建議直接貼上本機檔案路徑；檔案選取或拖曳會先把檔案複製到本機 `uploads/` 資料夾再處理。
 
 ## Web UI 工作模式
