@@ -26,7 +26,7 @@ if (Test-Path "dist\LectureVideo2PDF") {
     --collect-all opencc `
     --hidden-import uvicorn `
     --hidden-import fastapi `
-    "src/lecture_video_to_pdf/__main__.py"
+    "scripts/pyinstaller_entry.py"
 
 Copy-Item -LiteralPath "README.md" -Destination "dist\LectureVideo2PDF\README.md" -Force
 Copy-Item -LiteralPath "README.en.md" -Destination "dist\LectureVideo2PDF\README.en.md" -Force
