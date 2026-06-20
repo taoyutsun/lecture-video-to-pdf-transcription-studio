@@ -21,7 +21,7 @@ from lecture_video_to_pdf.asr import (
     _segments_to_srt,
     run_faster_whisper,
 )
-from lecture_video_to_pdf.installer import cuda_runtime_install_command, faster_whisper_install_command
+from lecture_video_to_pdf.installer import CudaRuntimeInstaller, FasterWhisperInstaller, cuda_runtime_install_command, faster_whisper_install_command
 from lecture_video_to_pdf.models import AsrOptions, TranscriptSegment
 from lecture_video_to_pdf.pipeline import run_conversion, run_media_job, run_transcription
 from lecture_video_to_pdf.video import detect_candidate_frames, difference_hash, hamming_distance, probe_video
@@ -281,21 +281,49 @@ class CoreTests(unittest.TestCase):
         self.assertTrue(requirements.exists())
         self.assertIn(str(requirements), command)
 
+    def test_portable_faster_whisper_installer_does_not_run_pip(self):
+        installer = FasterWhisperInstaller()
+        with patch("lecture_video_to_pdf.installer.package_installed", return_value=False), patch(
+            "lecture_video_to_pdf.installer.running_as_frozen_app", return_value=True
+        ):
+            status = installer.start()
+
+        self.assertEqual(status["status"], "unavailable")
+        self.assertFalse(status["running"])
+        self.assertEqual(status["command"], [])
+        self.assertIn("portable app cannot install Python packages", status["message"])
+
+    def test_portable_cuda_runtime_installer_does_not_run_pip(self):
+        diagnostics = {
+            "gpu_available": True,
+            "runtime_ready": False,
+            "missing_runtime_dlls": ["cublas64_12.dll"],
+        }
+        installer = CudaRuntimeInstaller()
+        with patch("lecture_video_to_pdf.installer.prepare_cuda_runtime", return_value=diagnostics), patch(
+            "lecture_video_to_pdf.installer.running_as_frozen_app", return_value=True
+        ):
+            status = installer.start()
+
+        self.assertEqual(status["status"], "unavailable")
+        self.assertFalse(status["running"])
+        self.assertEqual(status["command"], [])
+        self.assertIn("portable app cannot install CUDA runtime", status["message"])
+
     def test_cuda_runtime_error_detection(self):
         self.assertTrue(_is_cuda_runtime_error(RuntimeError("Library cublas64_12.dll is not found or cannot be loaded")))
         self.assertFalse(_is_cuda_runtime_error(RuntimeError("model file not found")))
 
-    def test_faster_whisper_auto_falls_back_to_cpu_on_cuda_runtime_error(self):
+    def test_faster_whisper_auto_uses_cpu_when_cuda_runtime_is_not_ready(self):
         calls = []
 
         def fake_run_once(_video, _output, _options, _slides, _progress, device, compute_type, **_kwargs):
             calls.append((device, compute_type))
-            if device == "cuda":
-                raise RuntimeError("Library cublas64_12.dll is not found or cannot be loaded")
             return {"transcript_path": "transcript.txt", "transcript_srt_path": "transcript.srt", "slide_map_path": "slide_map.md", "warnings": []}
 
+        diagnostics = {"gpu_available": True, "runtime_ready": False, "missing_runtime_dlls": ["cublas64_12.dll"]}
         with patch("lecture_video_to_pdf.asr.package_installed", return_value=True), patch(
-            "lecture_video_to_pdf.asr.detect_cuda_available", return_value=True
+            "lecture_video_to_pdf.asr.prepare_cuda_runtime", return_value=diagnostics
         ), patch("lecture_video_to_pdf.asr._run_faster_whisper_once", side_effect=fake_run_once):
             result = run_faster_whisper(
                 Path("lecture.mp4"),
@@ -305,8 +333,30 @@ class CoreTests(unittest.TestCase):
                 lambda _ratio, _message: None,
             )
 
-        self.assertEqual(calls, [("cuda", "float16"), ("cpu", "int8")])
-        self.assertIn("CPU/int8", result["warnings"][0])
+        self.assertEqual(calls, [("cpu", "int8")])
+        self.assertEqual(result["warnings"], [])
+
+    def test_faster_whisper_auto_uses_cuda_when_runtime_is_ready(self):
+        calls = []
+
+        def fake_run_once(_video, _output, _options, _slides, _progress, device, compute_type, **_kwargs):
+            calls.append((device, compute_type))
+            return {"transcript_path": "transcript.txt", "transcript_srt_path": "transcript.srt", "slide_map_path": "slide_map.md", "warnings": []}
+
+        diagnostics = {"gpu_available": True, "runtime_ready": True, "missing_runtime_dlls": []}
+        with patch("lecture_video_to_pdf.asr.package_installed", return_value=True), patch(
+            "lecture_video_to_pdf.asr.prepare_cuda_runtime", return_value=diagnostics
+        ), patch("lecture_video_to_pdf.asr._run_faster_whisper_once", side_effect=fake_run_once):
+            result = run_faster_whisper(
+                Path("lecture.mp4"),
+                Path("."),
+                AsrOptions(engine="faster-whisper", device="auto", compute_type="auto"),
+                [],
+                lambda _ratio, _message: None,
+            )
+
+        self.assertEqual(calls, [("cuda", "float16")])
+        self.assertEqual(result["warnings"], [])
 
     def test_faster_whisper_explicit_cuda_falls_back_to_cpu_on_cuda_runtime_error(self):
         calls = []
@@ -317,9 +367,10 @@ class CoreTests(unittest.TestCase):
                 raise RuntimeError("Library cublas64_12.dll is not found or cannot be loaded")
             return {"transcript_path": "transcript.txt", "transcript_srt_path": "transcript.srt", "slide_map_path": "slide_map.md", "warnings": []}
 
+        diagnostics = {"gpu_available": True, "runtime_ready": False, "missing_runtime_dlls": ["cublas64_12.dll"]}
         with patch("lecture_video_to_pdf.asr.package_installed", return_value=True), patch(
-            "lecture_video_to_pdf.asr._run_faster_whisper_once", side_effect=fake_run_once
-        ):
+            "lecture_video_to_pdf.asr.prepare_cuda_runtime", return_value=diagnostics
+        ), patch("lecture_video_to_pdf.asr._run_faster_whisper_once", side_effect=fake_run_once):
             result = run_faster_whisper(
                 Path("lecture.mp4"),
                 Path("."),

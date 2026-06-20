@@ -11,8 +11,24 @@ from typing import Any
 from .utils import package_installed, prepare_cuda_runtime
 
 
+PORTABLE_PIP_UNAVAILABLE_MESSAGE = (
+    "This portable app cannot install Python packages at runtime. "
+    "Use a portable release that bundles faster-whisper, run from source/dev mode, "
+    "or choose an OpenAI-compatible ASR endpoint."
+)
+
+PORTABLE_CUDA_PIP_UNAVAILABLE_MESSAGE = (
+    "This portable app cannot install CUDA runtime Python packages at runtime. "
+    "Use CPU mode, run from source/dev mode, or rebuild the portable release with CUDA runtime dependencies bundled."
+)
+
+
 def _project_root() -> Path:
     return Path(__file__).resolve().parents[2]
+
+
+def running_as_frozen_app() -> bool:
+    return bool(getattr(sys, "frozen", False))
 
 
 def faster_whisper_install_command() -> tuple[list[str], Path | None]:
@@ -92,6 +108,15 @@ class FasterWhisperInstaller:
 
         with self._lock:
             if self._state.running:
+                return self._state.to_dict()
+            if running_as_frozen_app():
+                self._state = InstallState(
+                    status="unavailable",
+                    message=PORTABLE_PIP_UNAVAILABLE_MESSAGE,
+                    running=False,
+                    installed=False,
+                    command=[],
+                )
                 return self._state.to_dict()
             command, requirements = faster_whisper_install_command()
             self._state = InstallState(
@@ -177,6 +202,9 @@ class CudaRuntimeInstaller:
             elif diagnostics.get("runtime_ready"):
                 self._state.status = "installed"
                 self._state.message = "CUDA 12 runtime is ready."
+            elif running_as_frozen_app():
+                self._state.status = "unavailable"
+                self._state.message = PORTABLE_CUDA_PIP_UNAVAILABLE_MESSAGE
             else:
                 missing = ", ".join(diagnostics.get("missing_runtime_dlls", [])) or "unknown DLLs"
                 self._state.status = "missing"
@@ -204,6 +232,16 @@ class CudaRuntimeInstaller:
 
         with self._lock:
             if self._state.running:
+                return self._state.to_dict()
+            if running_as_frozen_app():
+                self._state = InstallState(
+                    status="unavailable",
+                    message=PORTABLE_CUDA_PIP_UNAVAILABLE_MESSAGE,
+                    running=False,
+                    installed=False,
+                    command=[],
+                    details=diagnostics,
+                )
                 return self._state.to_dict()
             command, requirements = cuda_runtime_install_command()
             self._state = InstallState(

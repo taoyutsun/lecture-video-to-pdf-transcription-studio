@@ -38,7 +38,12 @@ py -3.10 -m venv .venv
 
 ### 從 Release 取得打包版
 
-下載 release 壓縮檔 `LectureVideo2PDF-v0.1.0-windows-x64.zip` 後解壓縮，進入解壓縮出的 `LectureVideo2PDF` 資料夾，直接雙擊 `LectureVideo2PDF.exe` 即可啟動 Web UI。
+Release 提供兩種 Windows portable 壓縮檔：
+
+- `LectureVideo2PDF-v0.1.0-windows-x64.zip`：標準版，適合大多數使用者；支援 PDF 擷取、OpenAI-compatible endpoint、以及 `faster-whisper` CPU 轉錄。
+- `LectureVideo2PDF-v0.1.0-windows-x64-cuda.zip`：CUDA GPU 版，內建 CUDA 12 runtime，適合想用 NVIDIA GPU 加速本機 `faster-whisper` 的使用者；檔案明顯較大。
+
+下載後解壓縮，進入解壓縮出的 `LectureVideo2PDF` 資料夾，直接雙擊 `LectureVideo2PDF.exe` 即可啟動 Web UI。
 
 若要從 PowerShell 啟動，或需要指定 port，可執行：
 
@@ -112,7 +117,9 @@ lecture-video-studio transcribe "D:\Videos\lecture.mp4" --asr openai-compatible 
 
 ## faster-whisper
 
-PDF 擷取不需要 ASR。若要使用內建 `faster-whisper`，可在 Web UI 選擇 **faster-whisper** 後勾選「允許程式在開始轉換前自動安裝 ASR 依賴」，或按「立即安裝 ASR 依賴」。安裝會使用目前啟動本工具的 Python 環境，模型檔仍會在第一次轉錄時依 `faster-whisper` 機制下載。
+PDF 擷取不需要 ASR。Windows portable 標準版會內建 `faster-whisper` CPU 執行依賴；CUDA GPU 版另內建 NVIDIA CUDA 12 runtime。模型檔仍會在第一次轉錄時依 `faster-whisper` 機制下載，不會包在 release 內。
+
+若從 source/dev 模式執行，可在 Web UI 選擇 **faster-whisper** 後勾選「允許程式在開始轉換前自動安裝 ASR 依賴」，或按「立即安裝 ASR 依賴」。安裝會使用目前啟動本工具的 Python 環境。
 
 手動安裝：
 
@@ -129,7 +136,7 @@ PDF 擷取不需要 ASR。若要使用內建 `faster-whisper`，可在 Web UI �
 
 裝置使用 `auto` 時會優先使用可用的 GPU。若選擇 `cuda` 或 `auto` 嘗試 GPU，但 CUDA runtime 無法載入，工具會先嘗試加入可用的 CUDA 12 DLL 目錄；只有 GPU 載入實際失敗時，才會自動退回 CPU/int8 轉錄並在結果區顯示提醒。
 
-若電腦有 NVIDIA GPU，但沒有其他工具提供 CUDA 12 runtime DLL，Web UI 會在 **faster-whisper** 設定區顯示「CUDA GPU 加速依賴」。使用者可勾選允許安裝，讓程式在開始轉換前背景安裝 GPU runtime。這些套件體積較大，因此不會在未確認時自動安裝。
+若電腦有 NVIDIA GPU，但標準 portable 版無法載入 CUDA 12 runtime，請改用 `LectureVideo2PDF-v0.1.0-windows-x64-cuda.zip`。Source/dev 模式的 Web UI 會在 **faster-whisper** 設定區顯示「CUDA GPU 加速依賴」；使用者可勾選允許安裝，讓程式在開始轉換前背景安裝 GPU runtime。這些套件體積較大，因此不會在未確認時自動安裝。Portable release 不會在執行時安裝 CUDA runtime Python 套件；若要自行重新打包 GPU 版 portable，可在 source/dev 模式安裝依賴後執行 `.\scripts\build_portable.ps1 -IncludeCudaRuntime`。
 
 手動安裝 CUDA runtime 依賴：
 

@@ -39,7 +39,12 @@ By default, open `http://127.0.0.1:8787/`. If that port is already in use, choos
 
 ### From Release
 
-Download and extract `LectureVideo2PDF-v0.1.0-windows-x64.zip`, open the extracted `LectureVideo2PDF` folder, then double-click `LectureVideo2PDF.exe` to start the Web UI.
+The release provides two Windows portable archives:
+
+- `LectureVideo2PDF-v0.1.0-windows-x64.zip`: standard build for most users; supports PDF extraction, OpenAI-compatible endpoints, and `faster-whisper` CPU transcription.
+- `LectureVideo2PDF-v0.1.0-windows-x64-cuda.zip`: CUDA GPU build with CUDA 12 runtime bundled, for users who want NVIDIA GPU acceleration with local `faster-whisper`; this archive is significantly larger.
+
+Download and extract the archive, open the extracted `LectureVideo2PDF` folder, then double-click `LectureVideo2PDF.exe` to start the Web UI.
 
 To start from PowerShell, or to choose a port, run:
 
@@ -113,7 +118,9 @@ lecture-video-studio transcribe "D:\Videos\lecture.mp4" --asr openai-compatible 
 
 ## faster-whisper
 
-Video-to-PDF extraction does not require ASR. To use built-in `faster-whisper`, select **faster-whisper** in the Web UI and either allow automatic ASR dependency installation before conversion or click the install button. The installer uses the same Python environment that is running this tool; model files are still downloaded lazily by `faster-whisper` on first transcription.
+Video-to-PDF extraction does not require ASR. The Windows portable standard build bundles the CPU runtime dependencies for `faster-whisper`; the CUDA GPU build also bundles NVIDIA CUDA 12 runtime. Model files are still downloaded lazily by `faster-whisper` on first transcription and are not bundled in the release.
+
+When running from source/dev mode, select **faster-whisper** in the Web UI and either allow automatic ASR dependency installation before conversion or click the install button. The installer uses the same Python environment that is running this tool.
 
 Manual install:
 
@@ -130,7 +137,7 @@ Common models:
 
 When the device is set to `auto`, the tool prefers a usable GPU. If `cuda` is selected, or `auto` chooses GPU, the tool first tries to add available CUDA 12 DLL directories before loading `faster-whisper`. It falls back to CPU/int8 only after GPU loading actually fails, and reports the reason in the result warning.
 
-If the computer has an NVIDIA GPU but no CUDA 12 runtime DLLs are available from existing tools, the Web UI shows a **CUDA GPU acceleration dependencies** block under **faster-whisper** settings. Users can explicitly allow installation, and the tool will install GPU runtime dependencies in the background before conversion. These packages are large, so the tool never installs them without confirmation.
+If the computer has an NVIDIA GPU but the standard portable build cannot load CUDA 12 runtime, use `LectureVideo2PDF-v0.1.0-windows-x64-cuda.zip`. In source/dev mode, the Web UI shows a **CUDA GPU acceleration dependencies** block under **faster-whisper** settings. Users can explicitly allow installation, and the tool will install GPU runtime dependencies in the background before conversion. These packages are large, so the tool never installs them without confirmation. Portable releases do not install CUDA runtime Python packages at runtime; to rebuild a GPU portable package yourself, install the dependencies in source/dev mode and run `.\scripts\build_portable.ps1 -IncludeCudaRuntime`.
 
 Manual CUDA runtime install:
 

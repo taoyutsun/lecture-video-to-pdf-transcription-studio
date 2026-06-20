@@ -49,16 +49,23 @@ def cuda_dll_candidate_dirs(include_external_tools: bool = True) -> list[Path]:
     candidates.extend(Path(p) for p in env_dirs.split(os.pathsep) if p)
     candidates.extend(Path(p) for p in os.environ.get("PATH", "").split(os.pathsep) if p)
 
-    site_root = Path(sys.prefix) / "Lib" / "site-packages"
-    candidates.extend(
-        [
-            site_root / "ctranslate2",
-            site_root / "torch" / "lib",
-            site_root / "nvidia" / "cublas" / "bin",
-            site_root / "nvidia" / "cuda_runtime" / "bin",
-            site_root / "nvidia" / "cudnn" / "bin",
-        ]
-    )
+    package_roots = [Path(sys.prefix) / "Lib" / "site-packages"]
+    frozen_root = getattr(sys, "_MEIPASS", "")
+    if frozen_root:
+        package_roots.append(Path(frozen_root))
+    if getattr(sys, "frozen", False):
+        package_roots.append(Path(sys.executable).resolve().parent / "_internal")
+
+    for site_root in package_roots:
+        candidates.extend(
+            [
+                site_root / "ctranslate2",
+                site_root / "torch" / "lib",
+                site_root / "nvidia" / "cublas" / "bin",
+                site_root / "nvidia" / "cuda_runtime" / "bin",
+                site_root / "nvidia" / "cudnn" / "bin",
+            ]
+        )
 
     if include_external_tools:
         external_dirs = os.environ.get("LECTURE_VIDEO_TO_PDF_EXTERNAL_CUDA_DIRS", "")

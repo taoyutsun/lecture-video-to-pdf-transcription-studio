@@ -8,7 +8,7 @@ from typing import Any
 import httpx
 
 from .models import AsrOptions, SlideFrame, TranscriptSegment
-from .utils import detect_cuda_available, package_installed, prepare_cuda_runtime
+from .utils import package_installed, prepare_cuda_runtime
 
 GROQ_RESPONSE_FORMATS = {"json", "verbose_json", "text"}
 SRT_MAX_LINES = 2
@@ -387,7 +387,8 @@ def _short_error(exc: Exception) -> str:
 def _resolve_faster_whisper_runtime(options: AsrOptions) -> tuple[str, str]:
     device = options.device
     if device == "auto":
-        device = "cuda" if detect_cuda_available() else "cpu"
+        diagnostics = prepare_cuda_runtime()
+        device = "cuda" if diagnostics.get("gpu_available") and diagnostics.get("runtime_ready") else "cpu"
     compute_type = options.compute_type
     if compute_type == "auto":
         compute_type = "float16" if device == "cuda" else "int8"

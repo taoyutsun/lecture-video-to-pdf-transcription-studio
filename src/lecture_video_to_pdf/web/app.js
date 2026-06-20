@@ -35,6 +35,15 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function cudaRuntimeInstalled(status = state.cudaRuntimeInstall) {
+  const details = status?.details || state.cudaDiagnostics || {};
+  return Boolean(status?.installed || details.runtime_ready);
+}
+
+function cudaRuntimeUnavailable(status = state.cudaRuntimeInstall) {
+  return status?.status === "unavailable";
+}
+
 function currentTask() {
   return state.activeTab === "transcription" ? "transcription" : $("taskMode").value;
 }
@@ -229,7 +238,8 @@ function renderCudaRuntimeInstallStatus(data) {
   const details = status.details || state.cudaDiagnostics || {};
   state.cudaDiagnostics = details;
 
-  const installed = Boolean(status.installed || details.runtime_ready);
+  const installed = cudaRuntimeInstalled(status);
+  const unavailable = cudaRuntimeUnavailable(status);
   const running = Boolean(status.running);
   const hasGpu = Boolean(details.gpu_available);
   const consent = $("autoInstallCudaRuntime").checked;
@@ -240,12 +250,14 @@ function renderCudaRuntimeInstallStatus(data) {
     note = "未偵測到可用的 NVIDIA/CUDA GPU，不需要安裝 CUDA runtime。";
   } else if (installed) {
     note = `CUDA GPU 可使用：${details.torch_device || "NVIDIA GPU"}。`;
+  } else if (unavailable) {
+    note = `${status.message || "目前版本無法在執行時安裝 CUDA runtime。"} 裝置使用 auto 時會改用 CPU/int8。`;
   } else {
     note = `偵測到 CUDA GPU，但 CUDA 12 runtime 尚未完整可載入：${missing || "未知"}。可安裝 GPU 加速依賴，套件可能超過 1GB。`;
   }
 
   $("cudaRuntimeInstallStatus").textContent = running ? `${status.message} 這可能需要幾分鐘。` : note;
-  $("installCudaRuntimeBtn").disabled = !hasGpu || installed || running || !consent;
+  $("installCudaRuntimeBtn").disabled = !hasGpu || installed || unavailable || running || !consent;
   $("installCudaRuntimeBtn").textContent = running ? "安裝中..." : installed ? "CUDA 可使用" : "立即安裝 CUDA GPU 依賴";
 
   const log = Array.isArray(status.log) ? status.log.join("\n") : "";
@@ -337,13 +349,32 @@ async function waitForCudaRuntimeInstall() {
 
 async function ensureCudaRuntimeReady() {
   if (!taskNeedsAsr() || $("asrEngine").value !== "faster-whisper") return;
-  if ($("asrDevice").value === "cpu") return;
+  const selectedDevice = $("asrDevice").value;
+  if (selectedDevice === "cpu") return;
 
   const status = state.cudaRuntimeInstall || await refreshCudaRuntimeInstallStatus();
   const details = status.details || state.cudaDiagnostics || {};
-  if (!details.gpu_available || status.installed || details.runtime_ready) return;
-  if ($("autoInstallCudaRuntime").checked) {
+  const installed = cudaRuntimeInstalled(status);
+  if (!details.gpu_available || installed) return;
+
+  if (selectedDevice === "auto") {
+    if (cudaRuntimeUnavailable(status)) {
+      setProgress(0.03, "CUDA runtime 不完整，auto 模式將使用 CPU/int8");
+      return;
+    }
+    if ($("autoInstallCudaRuntime").checked) {
+      await waitForCudaRuntimeInstall();
+    }
+    return;
+  }
+
+  if ($("autoInstallCudaRuntime").checked && !cudaRuntimeUnavailable(status)) {
     await waitForCudaRuntimeInstall();
+  }
+
+  const refreshed = state.cudaRuntimeInstall || status;
+  if (!cudaRuntimeInstalled(refreshed)) {
+    throw new Error("你選擇了 cuda，但 CUDA runtime 尚未完整可載入。請改選 auto/cpu，或先提供可載入的 CUDA 12 runtime。");
   }
 }
 
@@ -364,6 +395,14 @@ function collectRequest(videoPath) {
   const model = engine === "openai-compatible"
     ? $("endpointModel").value.trim()
     : ($("asrModel").value || "base");
+  const selectedDevice = $("asrDevice").value;
+  const details = state.cudaRuntimeInstall?.details || state.cudaDiagnostics || {};
+  const device = engine === "faster-whisper"
+    && selectedDevice === "auto"
+    && details.gpu_available
+    && !cudaRuntimeInstalled()
+      ? "cpu"
+      : selectedDevice;
   return {
     video_path: videoPath,
     output_dir: $("outputDir").value.trim() || null,
@@ -374,7 +413,7 @@ function collectRequest(videoPath) {
       engine,
       model,
       language: getSelectedLanguage(),
-      device: $("asrDevice").value,
+      device,
       compute_type: $("computeType").value,
       endpoint_base_url: $("endpointBaseUrl").value.trim(),
       api_key: $("apiKey").value,
