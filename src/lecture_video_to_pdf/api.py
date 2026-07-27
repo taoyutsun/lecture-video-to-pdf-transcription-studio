@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from fastapi.responses import FileResponse, Response
+from pydantic import BaseModel, Field
 
 from .asr import test_openai_compatible_endpoint
 from .config import load_config
@@ -45,6 +45,9 @@ class AsrRequest(BaseModel):
     endpoint_base_url: str = ""
     api_key: str = ""
     response_format: str = "verbose_json"
+    endpoint_upload_strategy: Literal["auto", "direct", "chunked"] = "auto"
+    endpoint_max_chunk_mb: int = Field(default=20, ge=5, le=95)
+    endpoint_chunk_minutes: int = Field(default=10, ge=2, le=30)
 
 
 class JobRequest(BaseModel):
@@ -76,6 +79,10 @@ def create_app() -> FastAPI:
     @app.get("/")
     def index():
         return FileResponse(WEB_DIR / "index.html")
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon():
+        return Response(status_code=204)
 
     @app.get("/app.css")
     def css():
@@ -174,6 +181,7 @@ def create_app() -> FastAPI:
             "slides_dir": result.get("slides_dir"),
             "transcript": result.get("transcript_path"),
             "transcript_srt": result.get("transcript_srt_path"),
+            "transcription_manifest": result.get("transcription_manifest_path"),
             "slide_map": result.get("slide_map_path"),
             "slides": result.get("slides", []),
         }

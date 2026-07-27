@@ -138,6 +138,7 @@ function renderArtifacts(result) {
     ["投影片圖片資料夾", result.slides_dir],
     ["逐字稿 TXT", result.transcript_path],
     ["字幕 SRT", result.transcript_srt_path],
+    ["雲端分段紀錄", result.transcription_manifest_path],
     ["投影片逐字稿對照", result.slide_map_path],
   ].filter(([, value]) => value);
   $("artifactPaths").innerHTML = rows
@@ -418,6 +419,9 @@ function collectRequest(videoPath) {
       endpoint_base_url: $("endpointBaseUrl").value.trim(),
       api_key: $("apiKey").value,
       response_format: $("responseFormat").value,
+      endpoint_upload_strategy: $("endpointUploadStrategy").value,
+      endpoint_max_chunk_mb: Number($("endpointMaxChunkMb").value),
+      endpoint_chunk_minutes: Number($("endpointChunkMinutes").value),
     },
   };
 }
@@ -581,6 +585,11 @@ function bindEvents() {
   });
   $("taskMode").addEventListener("change", updateModeUi);
   $("asrEngine").addEventListener("change", updateAsrVisibility);
+  $("endpointUploadStrategy").addEventListener("change", () => {
+    const direct = $("endpointUploadStrategy").value === "direct";
+    $("endpointMaxChunkMb").disabled = direct;
+    $("endpointChunkMinutes").disabled = direct;
+  });
   $("autoInstallFasterWhisper").addEventListener("change", () => {
     renderFasterWhisperInstallStatus(state.fasterWhisperInstall);
   });

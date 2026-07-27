@@ -198,6 +198,14 @@ def find_ffmpeg(explicit: str | None = None) -> Path | None:
     which = shutil.which("ffmpeg")
     if which:
         return Path(which)
+    try:
+        import imageio_ffmpeg
+
+        bundled = Path(imageio_ffmpeg.get_ffmpeg_exe())
+        if bundled.exists():
+            return bundled
+    except Exception:
+        pass
     for candidate in [
         Path("C:/ffmpeg/bin/ffmpeg.exe"),
         Path("C:/Program Files/ffmpeg/bin/ffmpeg.exe"),

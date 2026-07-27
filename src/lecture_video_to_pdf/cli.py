@@ -32,6 +32,9 @@ def convert(args: argparse.Namespace) -> int:
         response_format=args.response_format,
         device=args.device,
         compute_type=args.compute_type,
+        endpoint_upload_strategy=args.endpoint_upload_strategy,
+        endpoint_max_chunk_mb=args.endpoint_max_chunk_mb,
+        endpoint_chunk_minutes=args.endpoint_chunk_minutes,
     )
     options = ConversionOptions(mode=args.mode, crop=args.crop, asr=asr)
     result = run_conversion(args.video, args.out, options, progress=_progress)
@@ -54,6 +57,9 @@ def transcribe(args: argparse.Namespace) -> int:
         response_format=args.response_format,
         device=args.device,
         compute_type=args.compute_type,
+        endpoint_upload_strategy=args.endpoint_upload_strategy,
+        endpoint_max_chunk_mb=args.endpoint_max_chunk_mb,
+        endpoint_chunk_minutes=args.endpoint_chunk_minutes,
     )
     result = run_transcription(args.media, args.out, asr, progress=_progress)
     print(f"Transcript TXT: {result.get('transcript_path')}")
@@ -88,6 +94,9 @@ def build_parser() -> argparse.ArgumentParser:
     conv.add_argument("--compute-type", choices=["auto", "int8", "float16", "int8_float16"], default="auto")
     conv.add_argument("--endpoint-base-url", default="")
     conv.add_argument("--api-key", default="")
+    conv.add_argument("--endpoint-upload-strategy", choices=["auto", "direct", "chunked"], default="auto")
+    conv.add_argument("--endpoint-max-chunk-mb", type=int, default=20)
+    conv.add_argument("--endpoint-chunk-minutes", type=int, default=10)
 
     trans = sub.add_parser("transcribe", help="Transcribe a video or audio file")
     trans.add_argument("media")
@@ -100,6 +109,9 @@ def build_parser() -> argparse.ArgumentParser:
     trans.add_argument("--compute-type", choices=["auto", "int8", "float16", "int8_float16"], default="auto")
     trans.add_argument("--endpoint-base-url", default="")
     trans.add_argument("--api-key", default="")
+    trans.add_argument("--endpoint-upload-strategy", choices=["auto", "direct", "chunked"], default="auto")
+    trans.add_argument("--endpoint-max-chunk-mb", type=int, default=20)
+    trans.add_argument("--endpoint-chunk-minutes", type=int, default=10)
     return parser
 
 

@@ -8,6 +8,16 @@ from typing import Any
 import httpx
 
 from .models import AsrOptions, SlideFrame, TranscriptSegment
+from .remote_asr import (
+    finalize_manifest,
+    merge_chunk_segments,
+    offset_chunk_segments,
+    post_transcription_with_retry,
+    prepare_audio_chunks,
+    remove_chunk_files,
+    resolve_upload_strategy,
+    update_manifest_chunk,
+)
 from .utils import package_installed, prepare_cuda_runtime
 
 GROQ_RESPONSE_FORMATS = {"json", "verbose_json", "text"}
@@ -225,7 +235,7 @@ def _parse_srt_timestamp(value: str) -> float:
     return (int(hh) * 3600) + (int(mm) * 60) + int(ss) + (int(ms) / 1000.0)
 
 
-def _compact_srt_text(srt_text: str) -> str:
+def _parse_srt_segments(srt_text: str) -> list[TranscriptSegment]:
     parsed: list[TranscriptSegment] = []
     blocks = re.split(r"\n\s*\n", srt_text.strip())
     for block in blocks:
@@ -248,6 +258,11 @@ def _compact_srt_text(srt_text: str) -> str:
                 )
         except Exception:
             continue
+    return parsed
+
+
+def _compact_srt_text(srt_text: str) -> str:
+    parsed = _parse_srt_segments(srt_text)
     return _segments_to_srt(parsed) if parsed else srt_text
 
 
@@ -436,11 +451,9 @@ def run_faster_whisper(
     write_slide_map: bool = True,
 ) -> dict:
     if not package_installed("faster_whisper"):
-        return {
-            "warnings": [
-                "faster-whisper is not installed. In the Web UI, choose faster-whisper and install optional ASR dependencies, or run: pip install -r requirements-asr.txt"
-            ]
-        }
+        raise RuntimeError(
+            "faster-whisper is not installed. In the Web UI, choose faster-whisper and install optional ASR dependencies, or run: pip install -r requirements-asr.txt"
+        )
 
     device, compute_type = _resolve_faster_whisper_runtime(options)
     try:
@@ -477,31 +490,18 @@ def run_faster_whisper(
         raise
 
 
-def run_openai_compatible(
-    video_path: Path,
-    output_dir: Path,
-    options: AsrOptions,
-    slides: list[SlideFrame],
-    progress,
-    write_slide_map: bool = True,
-) -> dict:
-    if not options.endpoint_base_url:
-        return {"warnings": ["OpenAI-compatible ASR endpoint is empty."]}
-    url = _transcription_url(options.endpoint_base_url)
-    headers = {}
-    if options.api_key:
-        headers["Authorization"] = f"Bearer {options.api_key}"
-    data = _openai_transcription_data(options)
-    progress(0.84, "呼叫 OpenAI-compatible ASR endpoint")
-    with video_path.open("rb") as fh:
-        files = {"file": (video_path.name, fh, "application/octet-stream")}
-        response = httpx.post(url, headers=headers, data=data, files=files, timeout=None)
+def _raise_for_openai_response(response: httpx.Response) -> None:
     try:
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:
         detail = _response_error_detail(response)
         raise RuntimeError(f"{exc.response.status_code} {exc.response.reason_phrase}: {detail}") from exc
 
+
+def _parse_openai_response(
+    response: httpx.Response,
+    options: AsrOptions,
+) -> tuple[list[TranscriptSegment], str, str | None]:
     content_type = response.headers.get("content-type", "")
     text = response.text
     segments: list[TranscriptSegment] = []
@@ -511,10 +511,37 @@ def run_openai_compatible(
         text = str(payload.get("text", "")).strip()
         segments = _parse_openai_segments(payload)
         detected_language = payload.get("language")
-        segments = _convert_chinese_segments(segments, options.language, str(detected_language) if detected_language else None)
-        text = _convert_chinese_text(text, options.language, str(detected_language) if detected_language else None)
+        detected = str(detected_language) if detected_language else None
+        segments = _convert_chinese_segments(segments, options.language, detected)
+        text = _convert_chinese_text(text, options.language, detected)
     elif options.response_format == "srt" or "-->" in text:
         srt_text = _convert_chinese_text(text, options.language)
+        segments = _parse_srt_segments(srt_text)
+    return segments, text, srt_text
+
+
+def _run_openai_direct(
+    video_path: Path,
+    output_dir: Path,
+    options: AsrOptions,
+    slides: list[SlideFrame],
+    progress,
+    write_slide_map: bool,
+) -> dict:
+    url = _transcription_url(options.endpoint_base_url)
+    headers = {"Authorization": f"Bearer {options.api_key}"} if options.api_key else {}
+    data = _openai_transcription_data(options)
+    progress(0.84, "呼叫 OpenAI-compatible ASR endpoint")
+    response, _attempts = post_transcription_with_retry(
+        url,
+        headers,
+        data,
+        video_path,
+        progress,
+        "雲端轉錄",
+    )
+    _raise_for_openai_response(response)
+    segments, text, srt_text = _parse_openai_response(response, options)
     outputs = _write_outputs(
         output_dir,
         slides,
@@ -529,6 +556,81 @@ def run_openai_compatible(
     return {**outputs, "warnings": []}
 
 
+def _run_openai_chunked(
+    video_path: Path,
+    output_dir: Path,
+    options: AsrOptions,
+    slides: list[SlideFrame],
+    progress,
+    write_slide_map: bool,
+) -> dict:
+    url = _transcription_url(options.endpoint_base_url)
+    headers = {"Authorization": f"Bearer {options.api_key}"} if options.api_key else {}
+    data = _openai_transcription_data(options)
+    data["response_format"] = "verbose_json"
+    chunks, chunk_dir, manifest_path = prepare_audio_chunks(video_path, output_dir, options, progress)
+    collected: list[TranscriptSegment] = []
+    warnings: list[str] = []
+
+    try:
+        for position, chunk in enumerate(chunks, 1):
+            ratio = 0.84 + (position / max(1, len(chunks))) * 0.12
+            progress(ratio, f"雲端轉錄第 {position}/{len(chunks)} 段")
+            attempts = 0
+            try:
+                response, attempts = post_transcription_with_retry(
+                    url,
+                    headers,
+                    data,
+                    chunk.path,
+                    progress,
+                    f"第 {position}/{len(chunks)} 段",
+                )
+                _raise_for_openai_response(response)
+                segments, text, srt_text = _parse_openai_response(response, options)
+                if not segments and srt_text:
+                    segments = _parse_srt_segments(srt_text)
+                collected.extend(offset_chunk_segments(segments, chunk, fallback_text=text))
+                update_manifest_chunk(manifest_path, chunk.index, "completed", attempts)
+            except Exception as exc:
+                update_manifest_chunk(manifest_path, chunk.index, "failed", attempts, str(exc))
+                raise
+
+        merged = merge_chunk_segments(collected)
+        outputs = _write_outputs(
+            output_dir,
+            slides,
+            merged,
+            write_slide_map=write_slide_map,
+        )
+        outputs["transcription_manifest_path"] = str(manifest_path)
+        if not merged:
+            warnings.append("Cloud ASR returned no transcript segments.")
+        finalize_manifest(manifest_path, completed=True, chunks_removed=False)
+        remove_chunk_files(chunk_dir)
+        finalize_manifest(manifest_path, completed=True, chunks_removed=not chunk_dir.exists())
+        return {**outputs, "warnings": warnings}
+    except Exception:
+        finalize_manifest(manifest_path, completed=False, chunks_removed=False)
+        raise
+
+
+def run_openai_compatible(
+    video_path: Path,
+    output_dir: Path,
+    options: AsrOptions,
+    slides: list[SlideFrame],
+    progress,
+    write_slide_map: bool = True,
+) -> dict:
+    if not options.endpoint_base_url:
+        raise ValueError("OpenAI-compatible ASR endpoint is empty.")
+    strategy = resolve_upload_strategy(video_path, options)
+    if strategy == "chunked":
+        return _run_openai_chunked(video_path, output_dir, options, slides, progress, write_slide_map)
+    return _run_openai_direct(video_path, output_dir, options, slides, progress, write_slide_map)
+
+
 def run_asr_if_requested(
     video_path: str | Path,
     output_dir: str | Path,
@@ -539,13 +641,10 @@ def run_asr_if_requested(
 ) -> dict:
     video = Path(video_path)
     output = Path(output_dir)
-    try:
-        if options.engine == "faster-whisper":
-            return run_faster_whisper(video, output, options, slides, progress, write_slide_map=write_slide_map)
-        if options.engine == "openai-compatible":
-            return run_openai_compatible(video, output, options, slides, progress, write_slide_map=write_slide_map)
-    except Exception as exc:
-        return {"warnings": [f"ASR failed: {exc}"]}
+    if options.engine == "faster-whisper":
+        return run_faster_whisper(video, output, options, slides, progress, write_slide_map=write_slide_map)
+    if options.engine == "openai-compatible":
+        return run_openai_compatible(video, output, options, slides, progress, write_slide_map=write_slide_map)
     return {"warnings": []}
 
 

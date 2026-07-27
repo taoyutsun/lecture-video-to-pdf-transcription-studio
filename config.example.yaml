@@ -19,3 +19,6 @@ asr:
     model: ""
     language: ""
     response_format: verbose_json
+    upload_strategy: auto
+    max_chunk_mb: 20
+    chunk_minutes: 10

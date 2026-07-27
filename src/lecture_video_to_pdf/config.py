@@ -22,6 +22,9 @@ class OpenAICompatibleConfig:
     model: str = ""
     language: str | None = ""
     response_format: str = "verbose_json"
+    upload_strategy: str = "auto"
+    max_chunk_mb: int = 20
+    chunk_minutes: int = 10
 
 
 @dataclass

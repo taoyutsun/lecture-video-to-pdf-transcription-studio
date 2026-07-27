@@ -6,6 +6,7 @@ from typing import Any, Callable, Literal
 
 Mode = Literal["fast", "balanced", "sensitive"]
 AsrEngine = Literal["none", "faster-whisper", "openai-compatible"]
+EndpointUploadStrategy = Literal["auto", "direct", "chunked"]
 TaskType = Literal["slides", "transcription", "slides_and_transcription"]
 
 
@@ -50,6 +51,9 @@ class AsrOptions:
     endpoint_base_url: str = ""
     api_key: str = ""
     response_format: str = "verbose_json"
+    endpoint_upload_strategy: EndpointUploadStrategy = "auto"
+    endpoint_max_chunk_mb: int = 20
+    endpoint_chunk_minutes: int = 10
 
 
 @dataclass
@@ -73,6 +77,7 @@ class ConversionResult:
     slides: list[SlideFrame]
     transcript_path: str | None = None
     transcript_srt_path: str | None = None
+    transcription_manifest_path: str | None = None
     slide_map_path: str | None = None
     warnings: list[str] = field(default_factory=list)
 

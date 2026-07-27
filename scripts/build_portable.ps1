@@ -38,6 +38,7 @@ $PyInstallerArgs = @(
     "--collect-all", "tokenizers",
     "--collect-all", "huggingface_hub",
     "--collect-all", "av",
+    "--collect-all", "imageio_ffmpeg",
     "--hidden-import", "uvicorn",
     "--hidden-import", "fastapi",
     "--hidden-import", "faster_whisper",

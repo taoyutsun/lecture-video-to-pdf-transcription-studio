@@ -158,6 +158,34 @@
                   api_key / token
                   <input id="apiKey" type="password" />
                 </label>
+                <label>
+                  上傳策略
+                  <select id="endpointUploadStrategy">
+                    <option value="auto" selected>自動（推薦）</option>
+                    <option value="chunked">一律分段</option>
+                    <option value="direct">直接上傳</option>
+                  </select>
+                </label>
+              </div>
+              <div class="grid-two">
+                <label>
+                  每段容量上限
+                  <select id="endpointMaxChunkMb">
+                    <option value="10">10 MB</option>
+                    <option value="20" selected>20 MB</option>
+                    <option value="50">50 MB</option>
+                    <option value="90">90 MB</option>
+                  </select>
+                </label>
+                <label>
+                  每段最長時間
+                  <select id="endpointChunkMinutes">
+                    <option value="5">5 分鐘</option>
+                    <option value="10" selected>10 分鐘</option>
+                    <option value="15">15 分鐘</option>
+                    <option value="20">20 分鐘</option>
+                  </select>
+                </label>
               </div>
               <button id="testEndpointBtn" type="button" class="secondary">測試連線</button>
               <div id="endpointStatus" class="inline-status"></div>

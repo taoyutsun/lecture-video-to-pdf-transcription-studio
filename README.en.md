@@ -17,6 +17,7 @@ PDF extraction does not require ASR. Transcription can use local `faster-whisper
   - `faster-whisper`
   - OpenAI-compatible ASR endpoint
   - Compatible with QwenASR, faster-whisper server, speaches, whisper.cpp server, Groq Whisper API, and similar services
+- Cloud ASR can extract and chunk audio automatically for long media that exceeds a provider's single-upload limit
 
 ## Install And Run
 
@@ -83,6 +84,7 @@ output/
   media_name_YYYYMMDD_HHMMSS/
     transcript.txt
     transcript.srt
+    transcription_manifest.json  # cloud chunked transcription only
     metadata.json
 ```
 
@@ -113,7 +115,7 @@ Transcribe only:
 
 ```powershell
 lecture-video-to-pdf transcribe "D:\Audio\lecture.mp3" --out output --asr faster-whisper --asr-model base --response-format srt
-lecture-video-studio transcribe "D:\Videos\lecture.mp4" --asr openai-compatible --endpoint-base-url https://api.groq.com/openai/v1 --asr-model whisper-large-v3-turbo
+lecture-video-studio transcribe "D:\Videos\lecture.mp4" --asr openai-compatible --endpoint-base-url https://api.groq.com/openai/v1 --asr-model whisper-large-v3-turbo --endpoint-upload-strategy auto
 ```
 
 ## faster-whisper
@@ -151,7 +153,7 @@ The language selector includes `Auto detect (Traditional Chinese for Chinese)`, 
 
 ## OpenAI-compatible Endpoint
 
-For OpenAI-compatible ASR endpoints, configure `base_url`, `api_key/token`, `model`, language, and `response_format` in the Web UI.
+For OpenAI-compatible ASR endpoints, configure `base_url`, `api_key/token`, `model`, language, `response_format`, upload strategy, maximum chunk size, and chunk duration in the Web UI.
 
 The connection test tries `/health` and common OpenAI `/models` endpoints. If the endpoint manages the loaded model server-side, such as QwenASR, the Web UI fixes the model selector to `default (configured by endpoint)` to avoid implying that this tool can switch the local model.
 
@@ -160,6 +162,15 @@ For a portable [QwenASRMiniTool](https://github.com/dseditor/QwenASRMiniTool) in
 If another local tool provides CUDA runtime DLLs but they are not on the system `PATH`, set `LECTURE_VIDEO_TO_PDF_EXTERNAL_CUDA_DIRS` to the extra DLL directories. Use the operating system path separator for multiple directories.
 
 Groq Speech-to-Text currently supports `json`, `verbose_json`, and `text`. If SRT output is needed, this tool requests `verbose_json` and generates `transcript.srt` locally.
+
+The default upload strategy is `Auto`:
+
+- Cloud endpoints: when the media exceeds the configured size, the tool extracts 16 kHz mono FLAC audio locally and splits it by duration and size.
+- Local endpoints (`localhost`, `127.0.0.1`, or `::1`): upload directly by default and let the local service handle the media.
+- `Always chunk`: useful for endpoints with a known attachment limit.
+- `Direct upload`: useful for local QwenASR or services known to accept large files.
+
+The default limit is 10 minutes and 20 MB per chunk. A short overlap around each boundary reduces clipped words. Chunks are submitted sequentially, with retries for temporary network failures, `429`, and common `5xx` responses. Segment timestamps are then converted back to the original media timeline and merged into complete TXT/SRT files. Temporary audio chunks are removed after success. `transcription_manifest.json` retains chunk status and retry counts but never contains the API key.
 
 API keys are not written to output files, metadata, or project config. The Web UI only keeps them in the current page, request payload, and background job memory.
 
@@ -176,6 +187,7 @@ output/
     thumbs/
     transcript.txt      # PDF + ASR only
     transcript.srt      # PDF + ASR only
+    transcription_manifest.json  # cloud chunked ASR only
     slide_map.md        # PDF + ASR only
 ```
 

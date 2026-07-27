@@ -110,6 +110,7 @@ def run_transcription(
         "slides": [],
         "transcript_path": asr_result.get("transcript_path"),
         "transcript_srt_path": asr_result.get("transcript_srt_path"),
+        "transcription_manifest_path": asr_result.get("transcription_manifest_path"),
         "slide_map_path": None,
         "warnings": warnings,
     }
@@ -200,14 +201,19 @@ def run_conversion(
 
     transcript_path = None
     transcript_srt_path = None
+    transcription_manifest_path = None
     slide_map_path = None
     if options.asr.engine != "none":
         progress(0.80, "執行選配語音轉文字")
-        asr_result = run_asr_if_requested(video_path, root, options.asr, slides, progress)
-        transcript_path = asr_result.get("transcript_path")
-        transcript_srt_path = asr_result.get("transcript_srt_path")
-        slide_map_path = asr_result.get("slide_map_path")
-        warnings.extend(asr_result.get("warnings", []))
+        try:
+            asr_result = run_asr_if_requested(video_path, root, options.asr, slides, progress)
+            transcript_path = asr_result.get("transcript_path")
+            transcript_srt_path = asr_result.get("transcript_srt_path")
+            transcription_manifest_path = asr_result.get("transcription_manifest_path")
+            slide_map_path = asr_result.get("slide_map_path")
+            warnings.extend(asr_result.get("warnings", []))
+        except Exception as exc:
+            warnings.append(f"ASR failed: {exc}")
 
     metadata_path = root / "metadata.json"
     result = ConversionResult(
@@ -220,6 +226,7 @@ def run_conversion(
         slides=slides,
         transcript_path=transcript_path,
         transcript_srt_path=transcript_srt_path,
+        transcription_manifest_path=transcription_manifest_path,
         slide_map_path=slide_map_path,
         warnings=warnings,
     )

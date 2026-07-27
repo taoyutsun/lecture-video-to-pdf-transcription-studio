@@ -9,3 +9,4 @@ PyYAML>=6.0
 httpx>=0.26
 python-multipart>=0.0.9
 opencc-python-reimplemented>=0.1.7
+imageio-ffmpeg>=0.5

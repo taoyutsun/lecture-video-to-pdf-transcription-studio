@@ -16,6 +16,7 @@ English: [README.en.md](README.en.md)
   - 內建選配 `faster-whisper`
   - OpenAI-compatible ASR endpoint
   - 可串接 QwenASR、faster-whisper server、speaches、whisper.cpp server、Groq Whisper API 等相容端點
+- 雲端 ASR 可自動抽取音軌並分段上傳，支援超過單次附件容量限制的長影音
 
 ## 安裝與啟動
 
@@ -82,6 +83,7 @@ output/
   media_name_YYYYMMDD_HHMMSS/
     transcript.txt
     transcript.srt
+    transcription_manifest.json  # 雲端分段轉錄時產生
     metadata.json
 ```
 
@@ -112,7 +114,7 @@ lecture-video-to-pdf convert "D:\Videos\lecture.mp4" --out output --asr openai-c
 
 ```powershell
 lecture-video-to-pdf transcribe "D:\Audio\lecture.mp3" --out output --asr faster-whisper --asr-model base --response-format srt
-lecture-video-studio transcribe "D:\Videos\lecture.mp4" --asr openai-compatible --endpoint-base-url https://api.groq.com/openai/v1 --asr-model whisper-large-v3-turbo
+lecture-video-studio transcribe "D:\Videos\lecture.mp4" --asr openai-compatible --endpoint-base-url https://api.groq.com/openai/v1 --asr-model whisper-large-v3-turbo --endpoint-upload-strategy auto
 ```
 
 ## faster-whisper
@@ -157,6 +159,7 @@ PDF 擷取不需要 ASR。Windows portable 標準版會內建 `faster-whisper` C
 - `model`
 - 語言
 - `response_format`
+- 上傳策略、每段容量上限與每段最長時間
 
 測試連線會依序嘗試 `/health` 與 OpenAI 常見的 `/models` 端點。若端點像 QwenASR 一樣由服務端固定載入模型，Web UI 會把模型選單固定為 `default（由端點配置）`，避免誤導使用者以為可由本工具切換本地模型。
 
@@ -165,6 +168,15 @@ PDF 擷取不需要 ASR。Windows portable 標準版會內建 `faster-whisper` C
 若電腦上已有其他工具提供 CUDA runtime DLL，且不在系統 `PATH` 中，可用 `LECTURE_VIDEO_TO_PDF_EXTERNAL_CUDA_DIRS` 指定額外 DLL 目錄；多個目錄請使用作業系統的路徑分隔符號。
 
 Groq Speech-to-Text 目前支援的回應格式為 `json`、`verbose_json`、`text`。若需要 `.srt`，本工具會使用 `verbose_json` 取得時間段後，在本機產生 `transcript.srt`。
+
+上傳策略預設為「自動」：
+
+- 雲端端點：媒體檔超過設定容量時，先在本機抽取成 16 kHz 單聲道 FLAC，再依時間與容量安全分段。
+- 本機端點（`localhost`、`127.0.0.1`、`::1`）：預設直接上傳，由本機服務決定如何處理。
+- `一律分段`：適合已知有附件限制的端點。
+- `直接上傳`：適合本機 QwenASR 或確定可接收大檔案的服務。
+
+分段預設最長 10 分鐘、20 MB，切點前後會保留短暫重疊以減少斷字。程式會依序送出片段，遇到暫時性網路中斷、`429` 或常見 `5xx` 狀態時自動重試，再將各段時間戳換算回原始影音並合併成完整 TXT/SRT。成功後暫存音訊片段會刪除；`transcription_manifest.json` 會保留各段狀態與重試次數，但不包含 API key。
 
 API key 不會寫入輸出檔、metadata 或專案設定；Web UI 只會在目前頁面、HTTP request 與背景 job 記憶體中短暫使用。
 
@@ -181,6 +193,7 @@ output/
     thumbs/
     transcript.txt      # PDF + ASR 時產生
     transcript.srt      # PDF + ASR 時產生
+    transcription_manifest.json  # 雲端分段 ASR 時產生
     slide_map.md        # PDF + ASR 時產生
 ```
 
