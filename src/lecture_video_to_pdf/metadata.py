@@ -3,7 +3,7 @@ from __future__ import annotations
 APP_NAME = "Lecture Video to PDF & Transcription Studio"
 APP_NAME_ZH = "課程影片轉講義 PDF 與逐字稿工具"
 APP_EXECUTABLE_NAME = "LectureVideo2PDF"
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.2.0"
 
 AUTHOR_NAME = "Arthur Tao"
 AUTHOR_BLOG_URL = "https://taoyutsun.blogspot.com/"
