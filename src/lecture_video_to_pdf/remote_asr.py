@@ -141,6 +141,7 @@ def prepare_audio_chunks(
     options: AsrOptions,
     progress,
     ffmpeg_path: Path | None = None,
+    overlap_seconds: float = CHUNK_OVERLAP_SECONDS,
 ) -> tuple[list[AudioChunk], Path, Path]:
     ffmpeg = ffmpeg_path or find_ffmpeg()
     if ffmpeg is None:
@@ -159,8 +160,8 @@ def prepare_audio_chunks(
 
     def encode_core(core_start: float, core_end: float) -> None:
         nonlocal next_index
-        media_start = max(0.0, core_start - CHUNK_OVERLAP_SECONDS)
-        media_end = min(duration, core_end + CHUNK_OVERLAP_SECONDS)
+        media_start = max(0.0, core_start - overlap_seconds)
+        media_end = min(duration, core_end + overlap_seconds)
         path = chunk_dir / f"chunk_{next_index:04d}.flac"
         _encode_audio_range(media_path, path, media_start, media_end, ffmpeg)
         size_bytes = path.stat().st_size
@@ -202,7 +203,7 @@ def prepare_audio_chunks(
         "duration_seconds": round(duration, 3),
         "max_chunk_mb": max_chunk_mb,
         "chunk_minutes": int(options.endpoint_chunk_minutes),
-        "overlap_seconds": CHUNK_OVERLAP_SECONDS,
+        "overlap_seconds": overlap_seconds,
         "completed": False,
         "chunks_removed": False,
         "chunks": [chunk.manifest_dict() for chunk in chunks],
@@ -282,6 +283,7 @@ def post_transcription_with_retry(
                     data=data,
                     files=files,
                     timeout=TRANSCRIPTION_TIMEOUT,
+                    follow_redirects=False,
                 )
             if response.status_code not in RETRYABLE_STATUS_CODES or attempt == max_attempts:
                 return response, attempt

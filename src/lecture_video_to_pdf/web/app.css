@@ -176,6 +176,10 @@ select:focus {
   gap: 12px;
 }
 
+#asrCommonOptions .grid-two {
+  grid-template-columns: 1fr;
+}
+
 .conditional {
   display: grid;
   gap: 12px;

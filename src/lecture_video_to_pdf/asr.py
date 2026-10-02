@@ -4,6 +4,7 @@ import json
 import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -300,6 +301,7 @@ def _write_outputs(
     text: str = "",
     srt_text: str | None = None,
     write_slide_map: bool = True,
+    write_srt: bool = True,
 ) -> dict[str, str]:
     transcript_path = output_dir / "transcript.txt"
     srt_path = output_dir / "transcript.srt"
@@ -310,12 +312,13 @@ def _write_outputs(
         srt_text = _segments_to_srt(segments) if segments else ""
     else:
         srt_text = _compact_srt_text(srt_text)
-    srt_path.write_text(srt_text, encoding="utf-8")
     outputs = {
         "transcript_path": str(transcript_path),
-        "transcript_srt_path": str(srt_path),
     }
-    if write_slide_map:
+    if write_srt:
+        srt_path.write_text(srt_text, encoding="utf-8")
+        outputs["transcript_srt_path"] = str(srt_path)
+    if write_slide_map and write_srt:
         slide_map_path.write_text(_slide_map(slides, segments, text), encoding="utf-8")
         outputs["slide_map_path"] = str(slide_map_path)
     return outputs
@@ -348,10 +351,18 @@ def _transcription_url(base_url: str) -> str:
 
 
 def _is_groq_endpoint(base_url: str) -> bool:
-    return "api.groq.com" in base_url.lower()
+    return urlsplit(base_url).hostname == "api.groq.com"
+
+
+def _text_only_model(options: AsrOptions) -> bool:
+    return urlsplit(options.endpoint_base_url).hostname == "api.openai.com" and options.model in {
+        "gpt-4o-transcribe", "gpt-4o-mini-transcribe",
+    }
 
 
 def _request_response_format(options: AsrOptions) -> str:
+    if _text_only_model(options):
+        return "json"
     requested = options.response_format or "verbose_json"
     if _is_groq_endpoint(options.endpoint_base_url) and requested not in GROQ_RESPONSE_FORMATS:
         return "verbose_json"
@@ -384,9 +395,9 @@ def _response_error_detail(response: httpx.Response) -> str:
 
 
 def _filter_asr_models(model_ids: list[str]) -> list[str]:
-    markers = ("whisper", "asr", "transcrib", "speech")
+    markers = ("whisper", "asr", "transcrib", "sensevoice")
     filtered = [model for model in model_ids if any(marker in model.lower() for marker in markers)]
-    return filtered or model_ids
+    return filtered
 
 
 def _is_cuda_runtime_error(exc: Exception) -> bool:
@@ -549,7 +560,10 @@ def _run_openai_direct(
         text=text,
         srt_text=srt_text,
         write_slide_map=write_slide_map,
+        write_srt=not _text_only_model(options),
     )
+    if _text_only_model(options):
+        return {**outputs, "warnings": ["此模型不提供字幕時間戳，已輸出 TXT，未產生 SRT 或投影片時間對照。"]}
     if options.response_format == "srt" and data["response_format"] != "srt" and not srt_text:
         outputs["warnings"] = ["Endpoint does not support direct SRT; generated transcript.srt locally from returned segments."]
         return outputs
@@ -567,9 +581,11 @@ def _run_openai_chunked(
     url = _transcription_url(options.endpoint_base_url)
     headers = {"Authorization": f"Bearer {options.api_key}"} if options.api_key else {}
     data = _openai_transcription_data(options)
-    data["response_format"] = "verbose_json"
-    chunks, chunk_dir, manifest_path = prepare_audio_chunks(video_path, output_dir, options, progress)
+    data["response_format"] = "json" if _text_only_model(options) else "verbose_json"
+    chunk_kwargs = {"overlap_seconds": 0.0} if _text_only_model(options) else {}
+    chunks, chunk_dir, manifest_path = prepare_audio_chunks(video_path, output_dir, options, progress, **chunk_kwargs)
     collected: list[TranscriptSegment] = []
+    texts: list[str] = []
     warnings: list[str] = []
 
     try:
@@ -590,10 +606,14 @@ def _run_openai_chunked(
                 segments, text, srt_text = _parse_openai_response(response, options)
                 if not segments and srt_text:
                     segments = _parse_srt_segments(srt_text)
-                collected.extend(offset_chunk_segments(segments, chunk, fallback_text=text))
+                if _text_only_model(options):
+                    texts.append(text)
+                else:
+                    collected.extend(offset_chunk_segments(segments, chunk, fallback_text=text))
                 update_manifest_chunk(manifest_path, chunk.index, "completed", attempts)
             except Exception as exc:
-                update_manifest_chunk(manifest_path, chunk.index, "failed", attempts, str(exc))
+                detail = str(exc).replace(options.api_key, "[redacted]") if options.api_key else str(exc)
+                update_manifest_chunk(manifest_path, chunk.index, "failed", attempts, detail)
                 raise
 
         merged = merge_chunk_segments(collected)
@@ -601,10 +621,14 @@ def _run_openai_chunked(
             output_dir,
             slides,
             merged,
+            text="\n".join(texts),
             write_slide_map=write_slide_map,
+            write_srt=not _text_only_model(options),
         )
         outputs["transcription_manifest_path"] = str(manifest_path)
-        if not merged:
+        if _text_only_model(options):
+            warnings.append("此模型不提供字幕時間戳，已彙整各段 TXT，未產生 SRT 或投影片時間對照。")
+        elif not merged:
             warnings.append("Cloud ASR returned no transcript segments.")
         finalize_manifest(manifest_path, completed=True, chunks_removed=False)
         remove_chunk_files(chunk_dir)
@@ -625,10 +649,14 @@ def run_openai_compatible(
 ) -> dict:
     if not options.endpoint_base_url:
         raise ValueError("OpenAI-compatible ASR endpoint is empty.")
-    strategy = resolve_upload_strategy(video_path, options)
-    if strategy == "chunked":
-        return _run_openai_chunked(video_path, output_dir, options, slides, progress, write_slide_map)
-    return _run_openai_direct(video_path, output_dir, options, slides, progress, write_slide_map)
+    try:
+        strategy = resolve_upload_strategy(video_path, options)
+        if strategy == "chunked":
+            return _run_openai_chunked(video_path, output_dir, options, slides, progress, write_slide_map)
+        return _run_openai_direct(video_path, output_dir, options, slides, progress, write_slide_map)
+    except Exception as exc:
+        detail = str(exc).replace(options.api_key, "[redacted]") if options.api_key else str(exc)
+        raise RuntimeError(detail) from None
 
 
 def run_asr_if_requested(
@@ -653,7 +681,7 @@ def test_openai_compatible_endpoint(base_url: str, api_key: str = "") -> dict[st
         return {"ok": False, "message": "base_url is empty"}
     base = base_url.rstrip("/")
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
-    candidates = [f"{base}/health"]
+    candidates = [f"{base}/health"] if urlsplit(base).hostname in {"localhost", "127.0.0.1", "::1"} else []
     if base.endswith("/v1"):
         candidates.append(f"{base}/models")
     else:
@@ -663,14 +691,14 @@ def test_openai_compatible_endpoint(base_url: str, api_key: str = "") -> dict[st
     first_success: dict[str, Any] | None = None
     try:
         for url in candidates:
-            response = httpx.get(url, headers=headers, timeout=8.0)
-            if response.status_code < 400:
+            response = httpx.get(url, headers=headers, timeout=8.0, follow_redirects=False)
+            if 200 <= response.status_code < 300:
                 body = response.text[:500]
                 names: list[str] = []
                 try:
                     payload = response.json()
                     if "data" in payload and isinstance(payload["data"], list):
-                        names = [str(item.get("id", "")) for item in payload["data"][:50] if item.get("id")]
+                        names = [str(item.get("id", "")) for item in payload["data"] if isinstance(item, dict) and item.get("id")]
                         names = _filter_asr_models(names)
                         body = "models: " + ", ".join(names) if names else json.dumps(payload, ensure_ascii=False)
                     elif payload.get("status") == "ok" and "model_ready" in payload:

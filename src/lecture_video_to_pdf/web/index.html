@@ -146,6 +146,14 @@
 
             <div id="endpointOptions" class="conditional hidden">
               <label>
+                服務 / 設定檔
+                <select id="endpointProfile"></select>
+              </label>
+              <label id="profileNameLabel" class="hidden">
+                設定檔名稱
+                <input id="profileName" type="text" maxlength="80" />
+              </label>
+              <label>
                 base_url
                 <input id="endpointBaseUrl" type="text" value="http://127.0.0.1:11435" />
               </label>
@@ -153,10 +161,15 @@
                 模型
                 <select id="endpointModel"></select>
               </label>
+              <label id="customModelLabel" class="hidden">
+                自訂模型 ID
+                <input id="customModel" type="text" maxlength="256" />
+              </label>
+              <div id="modelStatus" class="inline-status" aria-live="polite"></div>
               <div class="grid-two">
                 <label>
                   api_key / token
-                  <input id="apiKey" type="password" />
+                  <input id="apiKey" type="password" autocomplete="off" />
                 </label>
                 <label>
                   上傳策略
@@ -166,6 +179,15 @@
                     <option value="direct">直接上傳</option>
                   </select>
                 </label>
+              </div>
+              <div id="keyStatus" class="inline-status" aria-live="polite"></div>
+              <label class="check-row">
+                <input id="saveApiKey" type="checkbox" />
+                <span>將金鑰安全保存至 Windows 認證管理員</span>
+              </label>
+              <div class="grid-two">
+                <button id="saveProfileBtn" type="button" class="secondary">保存設定</button>
+                <button id="deleteKeyBtn" type="button" class="secondary" disabled>移除已保存金鑰</button>
               </div>
               <div class="grid-two">
                 <label>
@@ -187,7 +209,7 @@
                   </select>
                 </label>
               </div>
-              <button id="testEndpointBtn" type="button" class="secondary">測試連線</button>
+              <button id="testEndpointBtn" type="button" class="secondary">測試連線與更新模型</button>
               <div id="endpointStatus" class="inline-status"></div>
             </div>
           </div>

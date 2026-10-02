@@ -77,8 +77,10 @@ class JobManager:
         except Exception as exc:
             with job.lock:
                 job.status = "failed"
-                job.error = str(exc)
+                job.error = str(exc).replace(job.options.asr.api_key, "[redacted]") if job.options.asr.api_key else str(exc)
                 job.message = "Failed"
+        finally:
+            job.options.asr.api_key = ""
 
 
 manager = JobManager(max_workers=1)

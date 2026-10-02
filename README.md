@@ -161,7 +161,20 @@ PDF 擷取不需要 ASR。Windows portable 標準版會內建 `faster-whisper` C
 - `response_format`
 - 上傳策略、每段容量上限與每段最長時間
 
-測試連線會依序嘗試 `/health` 與 OpenAI 常見的 `/models` 端點。若端點像 QwenASR 一樣由服務端固定載入模型，Web UI 會把模型選單固定為 `default（由端點配置）`，避免誤導使用者以為可由本工具切換本地模型。
+### 服務設定檔與模型
+
+Source/dev 版新增服務設定檔（v0.3.0 分支測試中，尚未更新 portable release）：
+
+1. 在「服務 / 設定檔」選擇 Groq、OpenAI、本機 QwenASR，或「新增自訂端點」。內建服務會自動填入網址。
+2. 輸入金鑰，按「測試連線與更新模型」。只會列出已知的轉錄模型，不會混入聊天或文字轉語音模型。自訂端點可手動輸入模型 ID。
+3. 若要記住金鑰，勾選「將金鑰安全保存至 Windows 認證管理員」，再按「保存設定」。未勾選時只保存非敏感設定，金鑰僅供本次使用。
+4. 再次開啟工具會還原上次服務、模型、語言、格式與分段設定。已保存的金鑰不會填回瀏覽器，只顯示保存狀態；留空即可使用。可按「移除已保存金鑰」刪除。
+
+Groq 預設模型為 `whisper-large-v3-turbo`，也提供 `whisper-large-v3`。OpenAI 提供 `whisper-1`、`gpt-4o-transcribe`、`gpt-4o-mini-transcribe`；後兩者只輸出 TXT，不提供可靠的字幕時間戳，因此不開放 SRT 選項。`text`／`json` 選項使用服務的 JSON 回應，在本機輸出 TXT，不另存原始 JSON。
+
+預設清單不代表帳號一定有權使用；連線後會更新模型清單並顯示更新時間，實際轉錄仍受服務權限、配額與費率限制。不要在金鑰欄輸入其他服務的金鑰。模型與輸出能力可參閱 [Groq Speech-to-Text](https://console.groq.com/docs/speech-to-text) 與 [OpenAI 語音轉錄文件](https://developers.openai.com/api/docs/guides/speech-to-text)。
+
+本機連線會先嘗試 `/health`，雲端服務則使用常見的 `/models` 路徑。若端點像 QwenASR 一樣由服務端固定載入模型，Web UI 會把模型選單固定為 `default（由端點配置）`。其他本機連接埠可建立自訂設定檔。
 
 若使用 [QwenASRMiniTool](https://github.com/dseditor/QwenASRMiniTool) portable 版，可先啟動其 OpenAI 相容轉錄端點，再在本工具填入端點網址。若希望 Web UI 顯示本機 QwenASR 安裝狀態，可設定環境變數 `LECTURE_VIDEO_TO_PDF_QWEN_ASR_ROOT` 或 `QWEN_ASR_HOME` 指向 QwenASR 根目錄。
 
@@ -178,7 +191,16 @@ Groq Speech-to-Text 目前支援的回應格式為 `json`、`verbose_json`、`te
 
 分段預設最長 10 分鐘、20 MB，切點前後會保留短暫重疊以減少斷字。程式會依序送出片段，遇到暫時性網路中斷、`429` 或常見 `5xx` 狀態時自動重試，再將各段時間戳換算回原始影音並合併成完整 TXT/SRT。成功後暫存音訊片段會刪除；`transcription_manifest.json` 會保留各段狀態與重試次數，但不包含 API key。
 
-API key 不會寫入輸出檔、metadata 或專案設定；Web UI 只會在目前頁面、HTTP request 與背景 job 記憶體中短暫使用。
+### 金鑰與隱私
+
+- 非敏感偏好存於 `%LOCALAPPDATA%\LectureVideo2PDF\preferences.json`，不在專案、免安裝資料夾或輸出檔中。自訂端點名稱／網址也會保存，仍可能包含內部服務資訊，請勿公開此檔。
+- 勾選保存的 API key 由 Windows 認證管理員保存，綁定目前 Windows 使用者、服務設定檔與端點；不保存明文檔，也不寫入瀏覽器 localStorage、metadata、分段紀錄或 `config.yaml`。換電腦需重新輸入金鑰。
+- 未勾選保存的金鑰只用於目前頁面、請求與背景工作記憶體。工作結束後清除背景工作持有的金鑰。憑證庫失敗時不會改存明文；非 Windows 平台目前僅支援暫時使用。
+- 變更自訂端點網址後，原保存金鑰不會送到新端點；保存新網址會移除舊網址綁定的金鑰，需重新輸入。雲端網址必須使用 HTTPS，HTTP 僅允許本機 loopback。
+- Web UI 僅允許 loopback host，API 使用 HttpOnly / SameSite cookie 與修改請求的工作階段 token，並拒絕跨站來源。若自行呼叫 API，需先 GET `/` 保留 cookie，再 GET `/api/meta` 取得 `csrf_token`；POST 帶上 `X-Studio-Token`。
+- Windows 憑證保護可避免把明文金鑰誤打包或推送 GitHub，但不能防止同一 Windows 使用者權限下的惡意程式讀取憑證。請勿將整個使用者資料目錄一起分享。
+
+OpenAI 不提供時間戳的模型在分段時不使用重疊片段，只按原始順序彙整 TXT，不產生 SRT 或 `slide_map.md`。其餘支援時間戳的模型保留既有字幕合併流程。
 
 ## 輸出結構
 

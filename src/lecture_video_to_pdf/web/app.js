@@ -1,4 +1,9 @@
 const state = {
+  csrfToken: "",
+  profiles: [],
+  activeProfile: null,
+  secureStorageAvailable: false,
+  profileBusy: false,
   activeTab: "slides",
   activeJobId: null,
   queuedFiles: [],
@@ -17,6 +22,133 @@ const state = {
 };
 
 const $ = (id) => document.getElementById(id);
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+}
+
+function apiFetch(url, options = {}) {
+  const headers = new Headers(options.headers || {});
+  if (!["GET", "HEAD"].includes((options.method || "GET").toUpperCase())) {
+    headers.set("X-Studio-Token", state.csrfToken);
+  }
+  return window.fetch(url, { ...options, headers, credentials: "same-origin", cache: "no-store" });
+}
+
+async function requestJson(url, body) {
+  const response = await apiFetch(url, body === undefined ? {} : {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : `HTTP ${response.status}`);
+  return data;
+}
+
+async function profileAction(action) {
+  if (state.profileBusy) throw new Error("服務設定處理中，請稍候。");
+  state.profileBusy = true;
+  const ids = ["endpointProfile", "profileName", "endpointBaseUrl", "endpointModel", "customModel", "apiKey", "saveApiKey", "saveProfileBtn", "deleteKeyBtn", "testEndpointBtn", "asrLanguage", "responseFormat", "endpointUploadStrategy", "endpointMaxChunkMb", "endpointChunkMinutes"];
+  const disabled = ids.map((id) => $(id).disabled);
+  ids.forEach((id) => { $(id).disabled = true; });
+  try { return await action(); }
+  finally {
+    ids.forEach((id, index) => { $(id).disabled = disabled[index]; });
+    state.profileBusy = false;
+    $("endpointModel").disabled = Boolean(state.activeProfile?.server_managed_model || state.activeProfile?.provider === "qwen");
+    updateKeyStatus();
+    updateUploadStrategy();
+  }
+}
+
+function endpointModel() {
+  return $("endpointModel").value === "__custom" ? $("customModel").value.trim() : $("endpointModel").value;
+}
+
+function renderProfiles(selected) {
+  $("endpointProfile").replaceChildren(...state.profiles.map((profile) => new Option(profile.name, profile.id)), new Option("新增自訂端點", "__new"));
+  $("endpointProfile").value = selected || "qwen";
+}
+
+function renderEndpointModels(profile, current = profile.model) {
+  const names = [...new Set(profile.models || [])];
+  if (current && !names.includes(current)) names.push(current);
+  $("endpointModel").replaceChildren(...names.map((model) => new Option(model === "default" ? "default（由端點配置）" : model, model)));
+  if (profile.provider === "custom" && !profile.server_managed_model) $("endpointModel").add(new Option("手動輸入模型 ID", "__custom"));
+  $("endpointModel").value = current || names[0] || "__custom";
+  $("endpointModel").disabled = profile.provider === "qwen" || profile.server_managed_model;
+  setVisible("customModelLabel", $("endpointModel").value === "__custom");
+  renderModelStatus();
+}
+
+function renderModelStatus() {
+  const profile = state.activeProfile;
+  $("modelStatus").textContent = profile.models_checked_at
+    ? `模型清單更新：${new Date(profile.models_checked_at).toLocaleString()}`
+    : (profile.provider === "qwen" ? "使用服務端已載入模型" : "預設模型清單，尚未測試此帳號連線");
+}
+
+function updateKeyStatus() {
+  const profile = state.activeProfile;
+  const bound = profile?.base_url === $("endpointBaseUrl").value.trim().replace(/\/+$/, "");
+  const hasKey = Boolean(bound && profile?.has_key);
+  $("apiKey").placeholder = hasKey ? "已安全保存；留空即可使用" : "僅本次使用，除非勾選保存";
+  $("keyStatus").textContent = !state.secureStorageAvailable ? "此環境不支援安全保存，金鑰僅本次使用"
+    : (!bound && profile?.has_key ? "網址已變更，原金鑰不會用於新端點" : profile?.key_status || "未保存金鑰");
+  $("deleteKeyBtn").disabled = !hasKey;
+  $("saveApiKey").disabled = !state.secureStorageAvailable;
+}
+
+function applyProfile(profileId) {
+  const profile = state.profiles.find((item) => item.id === profileId) || {
+    id: null, provider: "custom", name: "自訂端點", base_url: "", model: "", models: [],
+    language: "", response_format: "srt", upload_strategy: "auto", max_chunk_mb: 20, chunk_minutes: 10,
+  };
+  state.activeProfile = profile;
+  $("apiKey").value = "";
+  $("saveApiKey").checked = false;
+  $("customModel").value = "";
+  $("endpointStatus").textContent = "";
+  $("profileName").value = profile.name;
+  $("endpointBaseUrl").value = profile.base_url;
+  $("endpointBaseUrl").readOnly = profile.provider !== "custom";
+  setVisible("profileNameLabel", profile.provider === "custom");
+  $("asrLanguage").value = profile.language || "";
+  $("responseFormat").value = profile.response_format;
+  $("endpointUploadStrategy").value = profile.upload_strategy;
+  $("endpointMaxChunkMb").value = String(profile.max_chunk_mb);
+  $("endpointChunkMinutes").value = String(profile.chunk_minutes);
+  renderEndpointModels(profile);
+  setResponseFormatOptions();
+  updateKeyStatus();
+  updateUploadStrategy();
+}
+
+async function saveProfile(explicit = false) {
+  const profile = state.activeProfile;
+  const saveKey = explicit && $("saveApiKey").checked;
+  const data = await requestJson("/api/asr/profiles", {
+    id: profile.id, provider: profile.provider, name: $("profileName").value,
+    base_url: $("endpointBaseUrl").value.trim(), model: endpointModel(), language: getSelectedLanguage(),
+    response_format: $("responseFormat").value, upload_strategy: $("endpointUploadStrategy").value,
+    max_chunk_mb: Number($("endpointMaxChunkMb").value), chunk_minutes: Number($("endpointChunkMinutes").value),
+    api_key: saveKey ? $("apiKey").value : "", save_key: saveKey,
+  });
+  state.activeProfile = data;
+  $("endpointBaseUrl").value = data.base_url;
+  const pos = state.profiles.findIndex((item) => item.id === data.id);
+  if (pos < 0) state.profiles.push(data); else state.profiles[pos] = data;
+  renderProfiles(data.id);
+  if (saveKey) $("apiKey").value = "";
+  $("saveApiKey").checked = false;
+  updateKeyStatus();
+  return data;
+}
+
+function updateUploadStrategy() {
+  const direct = $("endpointUploadStrategy").value === "direct";
+  $("endpointMaxChunkMb").disabled = direct;
+  $("endpointChunkMinutes").disabled = direct;
+}
 
 function fileName(path) {
   return String(path || "").split(/[\\/]/).pop();
@@ -93,6 +225,7 @@ function updateAsrVisibility() {
   setVisible("asrCommonOptions", needsAsr && engine !== "none");
   setVisible("fasterWhisperOptions", needsAsr && engine === "faster-whisper");
   setVisible("endpointOptions", needsAsr && engine === "openai-compatible");
+  setResponseFormatOptions();
   if (needsAsr && engine === "faster-whisper") {
     refreshFasterWhisperInstallStatus().catch((err) => {
       $("fasterWhisperInstallStatus").textContent = err.message;
@@ -107,7 +240,7 @@ function renderFileQueue() {
   $("fileQueue").innerHTML = state.queuedFiles
     .map((file, idx) => `
       <div class="file-chip">
-        <span title="${file.path}">${idx + 1}. ${file.name}</span>
+        <span title="${escapeHtml(file.path)}">${idx + 1}. ${escapeHtml(file.name)}</span>
         <button type="button" data-action="remove-file" data-pos="${idx}">移除</button>
       </div>
     `)
@@ -122,8 +255,8 @@ function renderBatchJobs() {
       const status = job.error ? `失敗：${job.error}` : `${job.status} ${Math.round((job.progress || 0) * 100)}%`;
       return `
         <div class="job-row" data-job-id="${job.id}">
-          <span title="${job.media_path || job.video_path}">${idx + 1}. ${name}</span>
-          <small>${status}</small>
+          <span title="${escapeHtml(job.media_path || job.video_path)}">${idx + 1}. ${escapeHtml(name)}</span>
+          <small>${escapeHtml(status)}</small>
         </div>
       `;
     })
@@ -142,7 +275,7 @@ function renderArtifacts(result) {
     ["投影片逐字稿對照", result.slide_map_path],
   ].filter(([, value]) => value);
   $("artifactPaths").innerHTML = rows
-    .map(([label, value]) => `<div><strong>${label}</strong>: ${value}</div>`)
+    .map(([label, value]) => `<div><strong>${label}</strong>: ${escapeHtml(value)}</div>`)
     .join("");
 }
 
@@ -182,9 +315,15 @@ function getSelectedLanguage() {
 
 function setResponseFormatOptions() {
   const current = $("responseFormat").value;
-  const options = ["srt", "verbose_json", "json", "text"];
+  let host = "";
+  try { host = new URL($("endpointBaseUrl").value).hostname; } catch { /* Incomplete custom URL. */ }
+  const textOnly = $("asrEngine").value === "openai-compatible"
+    && host === "api.openai.com"
+    && ["gpt-4o-transcribe", "gpt-4o-mini-transcribe"].includes(endpointModel());
+  const options = textOnly ? ["text", "json"] : ["srt", "verbose_json", "json", "text"];
   $("responseFormat").innerHTML = options.map((format) => `<option value="${format}">${format}</option>`).join("");
-  $("responseFormat").value = options.includes(current) ? current : "srt";
+  $("responseFormat").value = options.includes(current) ? current : options[0];
+  if (textOnly) $("modelStatus").textContent = "此模型不提供字幕時間戳，僅輸出逐字稿 TXT";
 }
 
 function renderFasterWhisperInstallStatus(data) {
@@ -275,7 +414,7 @@ function renderCudaRuntimeInstallStatus(data) {
 }
 
 async function refreshFasterWhisperInstallStatus() {
-  const response = await fetch("/api/asr/faster-whisper/install");
+  const response = await apiFetch("/api/asr/faster-whisper/install");
   if (!response.ok) throw new Error(response.statusText);
   const data = await response.json();
   renderFasterWhisperInstallStatus(data);
@@ -283,7 +422,7 @@ async function refreshFasterWhisperInstallStatus() {
 }
 
 async function refreshCudaRuntimeInstallStatus() {
-  const response = await fetch("/api/asr/cuda-runtime/install");
+  const response = await apiFetch("/api/asr/cuda-runtime/install");
   if (!response.ok) throw new Error(response.statusText);
   const data = await response.json();
   renderCudaRuntimeInstallStatus(data);
@@ -291,7 +430,7 @@ async function refreshCudaRuntimeInstallStatus() {
 }
 
 async function startFasterWhisperInstall() {
-  const response = await fetch("/api/asr/faster-whisper/install", {
+  const response = await apiFetch("/api/asr/faster-whisper/install", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ confirm: $("autoInstallFasterWhisper").checked }),
@@ -306,7 +445,7 @@ async function startFasterWhisperInstall() {
 }
 
 async function startCudaRuntimeInstall() {
-  const response = await fetch("/api/asr/cuda-runtime/install", {
+  const response = await apiFetch("/api/asr/cuda-runtime/install", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ confirm: $("autoInstallCudaRuntime").checked }),
@@ -394,7 +533,7 @@ function collectRequest(videoPath) {
   const needsAsr = task !== "slides";
   const engine = needsAsr ? $("asrEngine").value : "none";
   const model = engine === "openai-compatible"
-    ? $("endpointModel").value.trim()
+    ? endpointModel()
     : ($("asrModel").value || "base");
   const selectedDevice = $("asrDevice").value;
   const details = state.cudaRuntimeInstall?.details || state.cudaDiagnostics || {};
@@ -418,6 +557,8 @@ function collectRequest(videoPath) {
       compute_type: $("computeType").value,
       endpoint_base_url: $("endpointBaseUrl").value.trim(),
       api_key: $("apiKey").value,
+      profile_id: engine === "openai-compatible" ? state.activeProfile?.id : null,
+      use_saved_key: engine === "openai-compatible" && Boolean(state.activeProfile?.has_key) && !$("apiKey").value,
       response_format: $("responseFormat").value,
       endpoint_upload_strategy: $("endpointUploadStrategy").value,
       endpoint_max_chunk_mb: Number($("endpointMaxChunkMb").value),
@@ -433,11 +574,11 @@ function targetsFromUi() {
   return [...new Set(targets)];
 }
 
-async function createJob(mediaPath) {
-  const response = await fetch("/api/jobs", {
+async function createJob(mediaPath, template) {
+  const response = await apiFetch("/api/jobs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(collectRequest(mediaPath)),
+    body: JSON.stringify({ ...template, video_path: mediaPath }),
   });
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
@@ -462,14 +603,18 @@ async function startJobs() {
   $("startBtn").disabled = true;
   await ensureFasterWhisperReady();
   await ensureCudaRuntimeReady();
+  if (taskNeedsAsr() && $("asrEngine").value === "openai-compatible") {
+    await profileAction(() => saveProfile(false));
+  }
   $("artifactPaths").innerHTML = "";
   $("thumbGrid").innerHTML = "";
   setVisible("reviewSection", false);
   state.jobs.clear();
   state.activeJobId = null;
   setProgress(0, `建立 ${targets.length} 個工作`);
+  const template = collectRequest(targets[0]);
   for (const target of targets) {
-    await createJob(target);
+    await createJob(target, template);
   }
   renderBatchJobs();
   pollJobs();
@@ -479,7 +624,7 @@ async function pollJobs() {
   const ids = [...state.jobs.keys()];
   if (!ids.length) return;
   const updates = await Promise.all(ids.map(async (id) => {
-    const response = await fetch(`/api/jobs/${id}`);
+    const response = await apiFetch(`/api/jobs/${id}`);
     return response.json();
   }));
   for (const job of updates) state.jobs.set(job.id, job);
@@ -516,7 +661,7 @@ async function applyReview() {
   const kept = {};
   const order = state.slides.map((slide) => slide.index);
   for (const slide of state.slides) kept[String(slide.index)] = Boolean(slide.kept);
-  const response = await fetch(`/api/jobs/${state.activeJobId}/slides/review`, {
+  const response = await apiFetch(`/api/jobs/${state.activeJobId}/slides/review`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ order, kept }),
@@ -526,7 +671,7 @@ async function applyReview() {
     throw new Error(err.detail || response.statusText);
   }
   const data = await response.json();
-  $("artifactPaths").insertAdjacentHTML("afterbegin", `<div><strong>reviewed PDF</strong>: ${data.pdf_path}</div>`);
+  $("artifactPaths").insertAdjacentHTML("afterbegin", `<div><strong>reviewed PDF</strong>: ${escapeHtml(data.pdf_path)}</div>`);
   renderThumbs(data.slides || []);
 }
 
@@ -536,7 +681,7 @@ async function uploadFiles(files) {
   $("progressText").textContent = `正在上傳 ${list.length} 個檔案到 uploads 資料夾`;
   const form = new FormData();
   for (const file of list) form.append("files", file);
-  const response = await fetch("/api/uploads", { method: "POST", body: form });
+  const response = await apiFetch("/api/uploads", { method: "POST", body: form });
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
     throw new Error(err.detail || response.statusText);
@@ -551,26 +696,27 @@ async function uploadFiles(files) {
 
 async function testEndpoint() {
   setResponseFormatOptions();
+  await saveProfile(false);
+  const selectedId = state.activeProfile.id;
+  const selectedModel = endpointModel();
   $("endpointStatus").textContent = "測試中";
-  const response = await fetch("/api/test-openai-endpoint", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ base_url: $("endpointBaseUrl").value.trim(), api_key: $("apiKey").value }),
+  const data = await requestJson("/api/test-openai-endpoint", {
+    base_url: $("endpointBaseUrl").value.trim(), api_key: $("apiKey").value,
+    profile_id: selectedId, use_saved_key: Boolean(state.activeProfile.has_key) && !$("apiKey").value,
   });
-  const data = await response.json();
+  if (state.activeProfile.id !== selectedId) return;
   const managedModelNote = data.server_managed_model ? "；此端點使用服務端已載入模型，模型選單固定為 default" : "";
   $("endpointStatus").textContent = `${data.ok ? "可連線" : "連線失敗"}: ${data.message}${managedModelNote}`;
-  $("endpointModel").disabled = Boolean(data.server_managed_model);
-  if (data.server_managed_model) {
-    $("endpointModel").innerHTML = '<option value="default">default（由端點配置）</option>';
-    $("endpointModel").value = "default";
-    return;
-  }
-  if (data.ok && Array.isArray(data.models) && data.models.length) {
-    const current = $("endpointModel").value;
-    $("endpointModel").innerHTML = data.models.map((model) => `<option value="${model}">${model}</option>`).join("");
-    $("endpointModel").value = data.models.includes(current) ? current : data.models[0];
-    $("endpointModel").disabled = false;
+  if (data.ok && data.models?.length) {
+    const snapshot = await requestJson("/api/asr/profiles");
+    state.profiles = snapshot.profiles;
+    state.activeProfile = state.profiles.find((profile) => profile.id === selectedId);
+    const current = data.models.includes(selectedModel) ? selectedModel : data.models[0];
+    renderEndpointModels(state.activeProfile, current);
+    setResponseFormatOptions();
+    await saveProfile(false);
+  } else if (data.ok) {
+    $("modelStatus").textContent = "端點可連線，但未提供可辨識的轉錄模型；可使用預設值或手動輸入";
   }
 }
 
@@ -585,10 +731,33 @@ function bindEvents() {
   });
   $("taskMode").addEventListener("change", updateModeUi);
   $("asrEngine").addEventListener("change", updateAsrVisibility);
-  $("endpointUploadStrategy").addEventListener("change", () => {
-    const direct = $("endpointUploadStrategy").value === "direct";
-    $("endpointMaxChunkMb").disabled = direct;
-    $("endpointChunkMinutes").disabled = direct;
+  $("endpointUploadStrategy").addEventListener("change", updateUploadStrategy);
+  $("endpointProfile").addEventListener("change", () => applyProfile($("endpointProfile").value));
+  $("endpointBaseUrl").addEventListener("input", () => {
+    $("apiKey").value = "";
+    $("saveApiKey").checked = false;
+    updateKeyStatus();
+    setResponseFormatOptions();
+  });
+  $("endpointModel").addEventListener("change", () => {
+    setVisible("customModelLabel", $("endpointModel").value === "__custom");
+    renderModelStatus();
+    setResponseFormatOptions();
+  });
+  $("saveProfileBtn").addEventListener("click", () => profileAction(() => saveProfile(true))
+    .then(() => { $("endpointStatus").textContent = "設定已保存"; })
+    .catch((err) => { $("endpointStatus").textContent = err.message; }));
+  $("deleteKeyBtn").addEventListener("click", async () => {
+    if (!window.confirm("移除此服務已保存的金鑰？")) return;
+    try {
+      await profileAction(async () => {
+        const updated = await requestJson(`/api/asr/profiles/${state.activeProfile.id}/delete-key`, {});
+        state.activeProfile = updated;
+        state.profiles = state.profiles.map((item) => item.id === updated.id ? updated : item);
+        $("apiKey").value = "";
+        updateKeyStatus();
+      });
+    } catch (err) { $("endpointStatus").textContent = err.message; }
   });
   $("autoInstallFasterWhisper").addEventListener("change", () => {
     renderFasterWhisperInstallStatus(state.fasterWhisperInstall);
@@ -614,7 +783,7 @@ function bindEvents() {
     $("startBtn").disabled = false;
     $("progressText").textContent = err.message;
   }));
-  $("testEndpointBtn").addEventListener("click", () => testEndpoint().catch((err) => {
+  $("testEndpointBtn").addEventListener("click", () => profileAction(testEndpoint).catch((err) => {
     $("endpointStatus").textContent = err.message;
   }));
   $("applyReviewBtn").addEventListener("click", () => applyReview().catch((err) => {
@@ -670,8 +839,10 @@ function bindEvents() {
 
 async function init() {
   bindEvents();
-  const response = await fetch("/api/meta");
+  const response = await apiFetch("/api/meta");
   const meta = await response.json();
+  if (!response.ok) throw new Error("請重新開啟本機工具頁面以建立安全工作階段。");
+  state.csrfToken = meta.csrf_token;
   $("versionText").textContent = `${meta.app.name} ${meta.app.version}`;
   $("authorDescription").textContent = meta.author.description;
   $("blogLink").href = meta.author.blog;
@@ -689,16 +860,17 @@ async function init() {
 
   $("asrModel").innerHTML = meta.asr.models.map((model) => `<option value="${model}">${model}</option>`).join("");
   $("asrModel").value = meta.asr.cuda_available ? "turbo" : "base";
-  $("endpointModel").innerHTML = meta.asr.openai_models.map((model) => `<option value="${model}">${model}</option>`).join("");
-  $("endpointModel").value = "whisper-large-v3-turbo";
   $("asrLanguage").innerHTML = meta.asr.languages
     .map((lang) => `<option value="${lang.value}">${lang.label_zh}</option>`)
     .join("");
   $("asrLanguage").value = "";
 
-  if (meta.asr.qwen_hint && meta.asr.qwen_hint.installed) {
-    $("endpointBaseUrl").value = meta.asr.qwen_hint.default_endpoint;
-  }
+  const snapshot = await requestJson("/api/asr/profiles");
+  state.profiles = snapshot.profiles;
+  state.secureStorageAvailable = snapshot.secure_storage_available;
+  renderProfiles(snapshot.active_profile);
+  if (snapshot.configured) $("asrEngine").value = "openai-compatible";
+  applyProfile(snapshot.active_profile);
   renderFasterWhisperInstallStatus(meta.asr.faster_whisper_install);
   renderCudaRuntimeInstallStatus(meta.asr.cuda_runtime_install);
   setResponseFormatOptions();

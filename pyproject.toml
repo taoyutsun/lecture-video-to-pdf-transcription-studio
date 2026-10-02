@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lecture-video-to-pdf"
-version = "0.2.0"
+version = "0.3.0"
 description = "Local tool for extracting lecture slide PDFs and transcripts from videos or audio files."
 readme = "README.md"
 requires-python = ">=3.10"

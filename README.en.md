@@ -155,7 +155,20 @@ The language selector includes `Auto detect (Traditional Chinese for Chinese)`, 
 
 For OpenAI-compatible ASR endpoints, configure `base_url`, `api_key/token`, `model`, language, `response_format`, upload strategy, maximum chunk size, and chunk duration in the Web UI.
 
-The connection test tries `/health` and common OpenAI `/models` endpoints. If the endpoint manages the loaded model server-side, such as QwenASR, the Web UI fixes the model selector to `default (configured by endpoint)` to avoid implying that this tool can switch the local model.
+### Provider Profiles and Models
+
+Provider profiles are available in the source/dev feature branch for v0.3.0. The existing portable release has not been updated yet.
+
+1. Select Groq, OpenAI, local QwenASR, or a new custom endpoint. Built-in providers populate the URL automatically.
+2. Enter the API key and test the connection to refresh transcription models. Chat/TTS models are excluded. Custom endpoints also support manually entered model IDs.
+3. To remember the key, check the Windows Credential Manager option and click Save settings. Without that checkbox, only non-secret preferences are saved; the key stays temporary.
+4. Subsequent launches restore provider, model, language, format and chunk settings. Saved keys are not returned to the browser. Leave the key field empty to use the saved credential, or remove it with the dedicated button.
+
+Groq defaults to `whisper-large-v3-turbo` and also offers `whisper-large-v3`. OpenAI offers `whisper-1`, `gpt-4o-transcribe` and `gpt-4o-mini-transcribe`. The latter two lack subtitle timestamps, so only TXT output is available, not SRT. Both the `text` and `json` selections request JSON from these models and write local TXT, not a separate raw JSON file.
+
+Preset model lists are not proof of account access. Connection tests refresh the list with a last-checked timestamp; actual transcription is still subject to permissions, quotas and charges. Use a separate key for each provider. See the official [Groq Speech-to-Text](https://console.groq.com/docs/speech-to-text) and [OpenAI transcription guides](https://developers.openai.com/api/docs/guides/speech-to-text) for model capabilities.
+
+Local connection tests try `/health` first; cloud providers use common `/models` endpoints. Server-managed endpoints such as QwenASR use `default (configured by endpoint)` rather than implying that the client can switch loaded models. Create a custom profile for a different local port.
 
 For a portable [QwenASRMiniTool](https://github.com/dseditor/QwenASRMiniTool) installation, start its OpenAI-compatible transcription endpoint and enter the endpoint URL in this tool. To let the Web UI show local QwenASR installation status, set `LECTURE_VIDEO_TO_PDF_QWEN_ASR_ROOT` or `QWEN_ASR_HOME` to the QwenASR root directory.
 
@@ -172,7 +185,16 @@ The default upload strategy is `Auto`:
 
 The default limit is 10 minutes and 20 MB per chunk. A short overlap around each boundary reduces clipped words. Chunks are submitted sequentially, with retries for temporary network failures, `429`, and common `5xx` responses. Segment timestamps are then converted back to the original media timeline and merged into complete TXT/SRT files. Temporary audio chunks are removed after success. `transcription_manifest.json` retains chunk status and retry counts but never contains the API key.
 
-API keys are not written to output files, metadata, or project config. The Web UI only keeps them in the current page, request payload, and background job memory.
+### Credentials and Privacy
+
+- Non-secret preferences live in `%LOCALAPPDATA%\LectureVideo2PDF\preferences.json`, outside the repository, portable folder and outputs. Custom names and URLs may still disclose internal services; do not publish this file.
+- Opt-in saved keys use Windows Credential Manager, scoped to the current Windows user and bound to the profile and endpoint. No plaintext key file, browser localStorage, metadata, chunk manifest or `config.yaml` is written. Re-enter keys when moving to another computer.
+- Temporary keys remain in the page, request and job memory; completed jobs release their key. Credential store failures never fall back to plaintext. Non-Windows platforms currently support temporary keys only.
+- Changing a custom endpoint cannot reuse its saved key; saving the new URL removes the old credential binding. Cloud endpoints must use HTTPS; HTTP is limited to loopback.
+- The Web UI accepts loopback hosts only. API access requires an HttpOnly/SameSite session cookie; mutations also require a token and cross-site origins are rejected. Programmatic clients must GET `/` and retain cookies, GET `/api/meta` for `csrf_token`, then supply `X-Studio-Token` on POST requests.
+- Windows credentials prevent accidental plaintext packaging or Git publication, but are not protection against malware running as the same Windows user. Do not share the application user-data directory.
+
+OpenAI text-only models use non-overlapping chunks and concatenate TXT in media order, without generating SRT or `slide_map.md`. Timestamp-capable models retain the existing subtitle merge behavior.
 
 ## Output
 

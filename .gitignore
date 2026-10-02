@@ -16,6 +16,10 @@ uploads/
 tmp/
 *.log
 config.yaml
+preferences*.json
+.env
+.env.*
+!.env.example
 .mypy_cache/
 .ruff_cache/
 htmlcov/

@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import sys
 import webbrowser
+import threading
+import uuid
 from pathlib import Path
 
 from .api import create_app
@@ -17,9 +19,26 @@ def _progress(ratio: float, message: str) -> None:
 def run_server(host: str, port: int, open_browser: bool) -> None:
     import uvicorn
 
+    if host not in {"localhost", "127.0.0.1", "::1"}:
+        raise ValueError("The credential-bearing Web UI must bind to a loopback address.")
+    server = uvicorn.Server(uvicorn.Config(create_app(), host=host, port=port, log_level="info"))
+    stopped = threading.Event()
+
+    def open_when_ready():
+        for _ in range(300):
+            if stopped.wait(0.1):
+                return
+            if server.started:
+                browser_host = f"[{host}]" if ":" in host else host
+                webbrowser.open(f"http://{browser_host}:{port}/?launch={uuid.uuid4().hex}")
+                return
+
     if open_browser:
-        webbrowser.open(f"http://{host}:{port}/")
-    uvicorn.run(create_app(), host=host, port=port, log_level="info")
+        threading.Thread(target=open_when_ready, daemon=True).start()
+    try:
+        server.run()
+    finally:
+        stopped.set()
 
 
 def convert(args: argparse.Namespace) -> int:
