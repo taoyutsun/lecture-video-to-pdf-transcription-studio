@@ -42,8 +42,8 @@ By default, open `http://127.0.0.1:8787/`. If that port is already in use, choos
 
 The release provides two Windows portable archives:
 
-- `LectureVideo2PDF-v0.2.0-windows-x64.zip`: standard build for most users; supports PDF extraction, OpenAI-compatible endpoints, and `faster-whisper` CPU transcription.
-- `LectureVideo2PDF-v0.2.0-windows-x64-cuda.zip`: CUDA GPU build with CUDA 12 runtime bundled, for users who want NVIDIA GPU acceleration with local `faster-whisper`; this archive is significantly larger.
+- `LectureVideo2PDF-v0.3.0-windows-x64.zip`: standard build for most users; supports PDF extraction, OpenAI-compatible endpoints, and `faster-whisper` CPU transcription.
+- `LectureVideo2PDF-v0.3.0-windows-x64-cuda.zip`: CUDA GPU build with CUDA 12 runtime bundled, for users who want NVIDIA GPU acceleration with local `faster-whisper`; this archive is significantly larger.
 
 Download and extract the archive, open the extracted `LectureVideo2PDF` folder, then double-click `LectureVideo2PDF.exe` to start the Web UI.
 
@@ -139,7 +139,7 @@ Common models:
 
 When the device is set to `auto`, the tool prefers a usable GPU. If `cuda` is selected, or `auto` chooses GPU, the tool first tries to add available CUDA 12 DLL directories before loading `faster-whisper`. It falls back to CPU/int8 only after GPU loading actually fails, and reports the reason in the result warning.
 
-If the computer has an NVIDIA GPU but the standard portable build cannot load CUDA 12 runtime, use `LectureVideo2PDF-v0.2.0-windows-x64-cuda.zip`. In source/dev mode, the Web UI shows a **CUDA GPU acceleration dependencies** block under **faster-whisper** settings. Users can explicitly allow installation, and the tool will install GPU runtime dependencies in the background before conversion. These packages are large, so the tool never installs them without confirmation. Portable releases do not install CUDA runtime Python packages at runtime; to rebuild a GPU portable package yourself, install the dependencies in source/dev mode and run `.\scripts\build_portable.ps1 -IncludeCudaRuntime`.
+If the computer has an NVIDIA GPU but the standard portable build cannot load CUDA 12 runtime, use `LectureVideo2PDF-v0.3.0-windows-x64-cuda.zip`. In source/dev mode, the Web UI shows a **CUDA GPU acceleration dependencies** block under **faster-whisper** settings. Users can explicitly allow installation, and the tool will install GPU runtime dependencies in the background before conversion. These packages are large, so the tool never installs them without confirmation. Portable releases do not install CUDA runtime Python packages at runtime; to rebuild a GPU portable package yourself, install the dependencies in source/dev mode and run `.\scripts\build_portable.ps1 -IncludeCudaRuntime -DistPath dist-gpu`. Builds do not overwrite existing output; choose a fresh `-DistPath` when rebuilding.
 
 Manual CUDA runtime install:
 
@@ -157,7 +157,7 @@ For OpenAI-compatible ASR endpoints, configure `base_url`, `api_key/token`, `mod
 
 ### Provider Profiles and Models
 
-Provider profiles are available in the source/dev feature branch for v0.3.0. The existing portable release has not been updated yet.
+Provider profiles are available in both source/dev and portable editions from v0.3.0.
 
 1. Select Groq, OpenAI, local QwenASR, or a new custom endpoint. Built-in providers populate the URL automatically.
 2. Enter the API key and test the connection to refresh transcription models. Chat/TTS models are excluded. Custom endpoints also support manually entered model IDs.

@@ -41,8 +41,8 @@ py -3.10 -m venv .venv
 
 Release 提供兩種 Windows portable 壓縮檔：
 
-- `LectureVideo2PDF-v0.2.0-windows-x64.zip`：標準版，適合大多數使用者；支援 PDF 擷取、OpenAI-compatible endpoint、以及 `faster-whisper` CPU 轉錄。
-- `LectureVideo2PDF-v0.2.0-windows-x64-cuda.zip`：CUDA GPU 版，內建 CUDA 12 runtime，適合想用 NVIDIA GPU 加速本機 `faster-whisper` 的使用者；檔案明顯較大。
+- `LectureVideo2PDF-v0.3.0-windows-x64.zip`：標準版，適合大多數使用者；支援 PDF 擷取、OpenAI-compatible endpoint、以及 `faster-whisper` CPU 轉錄。
+- `LectureVideo2PDF-v0.3.0-windows-x64-cuda.zip`：CUDA GPU 版，內建 CUDA 12 runtime，適合想用 NVIDIA GPU 加速本機 `faster-whisper` 的使用者；檔案明顯較大。
 
 下載後解壓縮，進入解壓縮出的 `LectureVideo2PDF` 資料夾，直接雙擊 `LectureVideo2PDF.exe` 即可啟動 Web UI。
 
@@ -138,7 +138,7 @@ PDF 擷取不需要 ASR。Windows portable 標準版會內建 `faster-whisper` C
 
 裝置使用 `auto` 時會優先使用可用的 GPU。若選擇 `cuda` 或 `auto` 嘗試 GPU，但 CUDA runtime 無法載入，工具會先嘗試加入可用的 CUDA 12 DLL 目錄；只有 GPU 載入實際失敗時，才會自動退回 CPU/int8 轉錄並在結果區顯示提醒。
 
-若電腦有 NVIDIA GPU，但標準 portable 版無法載入 CUDA 12 runtime，請改用 `LectureVideo2PDF-v0.2.0-windows-x64-cuda.zip`。Source/dev 模式的 Web UI 會在 **faster-whisper** 設定區顯示「CUDA GPU 加速依賴」；使用者可勾選允許安裝，讓程式在開始轉換前背景安裝 GPU runtime。這些套件體積較大，因此不會在未確認時自動安裝。Portable release 不會在執行時安裝 CUDA runtime Python 套件；若要自行重新打包 GPU 版 portable，可在 source/dev 模式安裝依賴後執行 `.\scripts\build_portable.ps1 -IncludeCudaRuntime`。
+若電腦有 NVIDIA GPU，但標準 portable 版無法載入 CUDA 12 runtime，請改用 `LectureVideo2PDF-v0.3.0-windows-x64-cuda.zip`。Source/dev 模式的 Web UI 會在 **faster-whisper** 設定區顯示「CUDA GPU 加速依賴」；使用者可勾選允許安裝，讓程式在開始轉換前背景安裝 GPU runtime。這些套件體積較大，因此不會在未確認時自動安裝。Portable release 不會在執行時安裝 CUDA runtime Python 套件；若要自行重新打包 GPU 版 portable，可在 source/dev 模式安裝依賴後執行 `.\scripts\build_portable.ps1 -IncludeCudaRuntime -DistPath dist-gpu`。打包不會覆蓋已有輸出；重建時請指定新的 `-DistPath`。
 
 手動安裝 CUDA runtime 依賴：
 
@@ -163,7 +163,7 @@ PDF 擷取不需要 ASR。Windows portable 標準版會內建 `faster-whisper` C
 
 ### 服務設定檔與模型
 
-Source/dev 版新增服務設定檔（v0.3.0 分支測試中，尚未更新 portable release）：
+v0.3.0 的 source/dev 與免安裝版皆提供服務設定檔：
 
 1. 在「服務 / 設定檔」選擇 Groq、OpenAI、本機 QwenASR，或「新增自訂端點」。內建服務會自動填入網址。
 2. 輸入金鑰，按「測試連線與更新模型」。只會列出已知的轉錄模型，不會混入聊天或文字轉語音模型。自訂端點可手動輸入模型 ID。
